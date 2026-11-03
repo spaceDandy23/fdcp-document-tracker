@@ -153,4 +153,21 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - Rerun a test after each change to it.
 - Run `vendor/bin/phpunit` to call the test runner directly. It accepts the same file path and `--filter=testName` arguments.
 
+
+## Project-Specific Instructions
+
+This repository contains the FDCP Document Tracking System.
+
+Before implementing features or modifying database
+relationships, read `docs/architecture.md`.
+
+Treat that document as the source of truth for
+business rules and system architecture.
+
+Follow Laravel Boost's existing framework guidelines
+and use the installed skills when relevant.
+
+Do not introduce fixed workflow stages or change
+document state transitions without explicit approval.
+
 </laravel-boost-guidelines>
