@@ -32,7 +32,9 @@ class DeclineDocumentRoute
             ]);
             $lockedDocument->update([
                 'current_handler_id' => $lockedRoute->from_user_id,
-                'status' => 'in_progress',
+                'status' => $lockedRoute->route_type === 'revision_resubmission'
+                    ? 'revision_requested'
+                    : 'in_progress',
             ]);
             $lockedDocument->actions()->create([
                 'document_route_id' => $lockedRoute->id,

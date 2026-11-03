@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\File;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Throwable;
 
@@ -20,8 +21,11 @@ class UploadDocumentVersion
     {
         Gate::authorize('uploadVersion', $document);
 
-        Validator::make(['file' => $file], [
+        Validator::make(['file' => $file, 'change_summary' => $changeSummary], [
             'file' => ['required', File::types(['pdf', 'docx'])->max(config('documents.max_upload_kb'))],
+            'change_summary' => $document->status === 'revision_requested'
+                ? ['required', 'string']
+                : ['nullable', 'string'],
         ])->validate();
 
         $disk = config('documents.disk');
@@ -36,6 +40,13 @@ class UploadDocumentVersion
             return DB::transaction(function () use ($document, $file, $changeSummary, $disk, $path): DocumentVersion {
                 $lockedDocument = Document::query()->lockForUpdate()->findOrFail($document->id);
                 Gate::authorize('uploadVersion', $lockedDocument);
+
+                if ($lockedDocument->status === 'revision_requested' && blank($changeSummary)) {
+                    throw ValidationException::withMessages([
+                        'change_summary' => 'A change summary is required for a revision.',
+                    ]);
+                }
+
                 $version = $lockedDocument->versions()->create([
                     'version_number' => ((int) $lockedDocument->versions()->max('version_number')) + 1,
                     'uploaded_by' => auth()->id(),

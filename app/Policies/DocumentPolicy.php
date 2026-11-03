@@ -45,12 +45,14 @@ class DocumentPolicy
 
     public function uploadVersion(User $user, Document $document): bool
     {
-        return $this->updateDraft($user, $document);
+        return $this->updateDraft($user, $document)
+            || ($user->id === $document->current_handler_id && $document->status === 'revision_requested');
     }
 
     public function submit(User $user, Document $document): bool
     {
-        return $this->updateDraft($user, $document);
+        return $this->updateDraft($user, $document)
+            || ($user->id === $document->current_handler_id && $document->status === 'revision_requested');
     }
 
     public function forward(User $user, Document $document): bool
@@ -75,5 +77,20 @@ class DocumentPolicy
     public function decline(User $user, Document $document, DocumentRoute $route): bool
     {
         return $this->acknowledge($user, $document, $route);
+    }
+
+    public function returnForRevision(User $user, Document $document): bool
+    {
+        return $user->id === $document->current_handler_id && $document->status === 'in_progress';
+    }
+
+    public function complete(User $user, Document $document): bool
+    {
+        return $user->id === $document->current_handler_id && $document->status === 'in_progress';
+    }
+
+    public function cancel(User $user, Document $document): bool
+    {
+        return $user->id === $document->created_by && $document->status === 'draft';
     }
 }

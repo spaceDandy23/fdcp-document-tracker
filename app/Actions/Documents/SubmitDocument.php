@@ -50,6 +50,33 @@ class SubmitDocument
                 ]);
             }
 
+            $isRevision = $lockedDocument->status === 'revision_requested';
+            $revisionRequest = $isRevision
+                ? $lockedDocument->routes()
+                    ->where(function ($query): void {
+                        $query->where('route_type', 'revision_return')
+                            ->orWhere(function ($query): void {
+                                $query->where('route_type', 'revision_resubmission')
+                                    ->where('status', 'declined');
+                            });
+                    })
+                    ->latest('id')
+                    ->first()
+                : null;
+
+            if ($isRevision && ($revisionRequest === null
+                || $revisionRequest->document_version_id === $lockedDocument->current_version_id)) {
+                throw ValidationException::withMessages([
+                    'document' => 'Upload a new document version before resubmitting the revision.',
+                ]);
+            }
+
+            if ($isRevision && $lockedDocument->tracking_number === null) {
+                throw ValidationException::withMessages([
+                    'document' => 'A revision must preserve its original tracking number.',
+                ]);
+            }
+
             $sender = User::query()
                 ->whereNotNull('division_id')
                 ->lockForUpdate()
@@ -75,7 +102,7 @@ class SubmitDocument
                 'to_user_id' => $recipient->id,
                 'from_division_id' => $sender->division_id,
                 'to_division_id' => $recipient->division_id,
-                'route_type' => 'initial',
+                'route_type' => $isRevision ? 'revision_resubmission' : 'initial',
                 'status' => 'pending',
                 'forwarded_at' => $now,
             ]);
@@ -84,11 +111,12 @@ class SubmitDocument
                 'tracking_number' => $trackingNumber,
                 'current_handler_id' => $recipient->id,
                 'status' => 'pending_acknowledgment',
-                'submitted_at' => $now,
+                'submitted_at' => $lockedDocument->submitted_at ?? $now,
             ]);
             $lockedDocument->actions()->create([
+                'document_route_id' => $isRevision ? $route->id : null,
                 'performed_by' => auth()->id(),
-                'action' => 'submitted',
+                'action' => $isRevision ? 'revision_resubmitted' : 'submitted',
                 'metadata' => ['tracking_number' => $trackingNumber],
             ]);
             $lockedDocument->actions()->create([
