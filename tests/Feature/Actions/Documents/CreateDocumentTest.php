@@ -8,6 +8,7 @@ use App\Models\Document;
 use App\Models\DocumentAction;
 use App\Models\DocumentType;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -146,6 +147,20 @@ class CreateDocumentTest extends TestCase
 
         $this->assertDatabaseCount('documents', 0);
         $this->assertDatabaseCount('document_actions', 0);
+    }
+
+    public function test_inactive_employee_cannot_create_a_document(): void
+    {
+        $employee = $this->createEmployee();
+        $employee->update(['is_active' => false]);
+        $documentType = $this->createDocumentType();
+        $this->actingAs($employee);
+
+        $this->expectException(AuthorizationException::class);
+        app(CreateDocument::class)->handle([
+            'title' => 'Unauthorized Draft',
+            'document_type_id' => $documentType->id,
+        ]);
     }
 
     private function createEmployee(): User

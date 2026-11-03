@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -22,6 +23,8 @@ class CreateDocument
         if (! $creator instanceof User) {
             throw new AuthenticationException;
         }
+
+        Gate::authorize('create', Document::class);
 
         $validated = Validator::make($attributes, [
             'title' => ['required', 'string', 'max:255'],

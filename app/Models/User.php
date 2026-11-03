@@ -70,6 +70,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'is_division_head' => 'boolean',
+            'is_admin' => 'boolean',
             'last_synced_at' => 'datetime',
         ];
     }
