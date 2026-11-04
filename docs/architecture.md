@@ -37,6 +37,12 @@
 ## Access Control
 - Authentication uses the existing FDCP SSO.
 - Users and divisions are synchronized locally.
+- FDCP userinfo identifies users by the stable `sub` claim and supplies the division as a code in `department`.
+- Division synchronization stores `code:<department>` in `sso_division_id`, reuses an existing exact-code division, and does not invent a numeric SSO division identifier.
+- FDCP SSO is the source of truth for the application role at `apps.document_tracking.role`.
+- Supported role slugs are case-sensitive: `admin`, `division_head`, and `staff`.
+- `admin` sets administrator oversight access, `division_head` sets division-head access, and `staff` grants neither elevated flag.
+- Missing, unknown, or malformed application roles are denied access. Role changes are synchronized at authentication and cannot be edited locally by users.
 - Creators, current handlers, and previous handlers can view relevant documents.
 - Division heads can view documents originating from or routed through their divisions.
 - Administrators have authorized oversight access.
