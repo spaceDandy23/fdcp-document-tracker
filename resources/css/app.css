@@ -4,6 +4,17 @@
 @source '../../storage/framework/views/*.php';
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    --color-fdcp-50: #fff5f5;
+    --color-fdcp-100: #ffe3e3;
+    --color-fdcp-600: #b91c1c;
+    --color-fdcp-700: #991b1b;
+    --color-fdcp-800: #7f1d1d;
+}
+
+@layer base {
+    [x-cloak] { display: none !important; }
+    body { @apply bg-slate-50 text-slate-900 antialiased; }
+    button, a, input, select, textarea { @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fdcp-600; }
 }

@@ -1,0 +1,181 @@
+<?php
+
+namespace Tests\Feature\Livewire;
+
+use App\Models\Division;
+use App\Models\Document;
+use App\Models\DocumentRoute;
+use App\Models\DocumentType;
+use App\Models\DocumentVersion;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
+use Tests\TestCase;
+
+class DocumentDetailTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withoutVite();
+        Storage::fake('local');
+        config(['documents.disk' => 'local']);
+    }
+
+    public function test_unauthorized_employee_cannot_view_or_mutate_a_document(): void
+    {
+        $owner = $this->employee();
+        $outsider = $this->employee();
+        $document = $this->document($owner);
+
+        $this->actingAs($outsider)->get(route('documents.show', $document))->assertForbidden();
+    }
+
+    public function test_creator_edits_uploads_submits_and_cancels_drafts(): void
+    {
+        $creator = $this->employee();
+        $recipient = $this->employee();
+        $document = $this->document($creator);
+
+        Livewire::actingAs($creator)->test('pages::documents.show', ['document' => $document])
+            ->set('title', 'Updated title')->call('saveDraft')->assertHasNoErrors()
+            ->set('file', UploadedFile::fake()->create('memo.pdf', 20, 'application/pdf'))->call('uploadVersion')->assertHasNoErrors()
+            ->set('recipientId', (string) $recipient->id)->call('submit')->assertHasNoErrors();
+
+        $document->refresh();
+        $this->assertSame('Updated title', $document->title);
+        $this->assertSame('pending_acknowledgment', $document->status);
+        $this->assertSame($recipient->id, $document->current_handler_id);
+        $this->assertNotNull($document->tracking_number);
+
+        $draft = $this->document($creator, ['title' => 'Disposable draft']);
+        Livewire::actingAs($creator)->test('pages::documents.show', ['document' => $draft])->call('cancel')->assertHasNoErrors();
+        $this->assertSame('cancelled', $draft->fresh()->status);
+    }
+
+    public function test_upload_validation_rejects_unsupported_files(): void
+    {
+        $creator = $this->employee();
+        $document = $this->document($creator);
+
+        Livewire::actingAs($creator)->test('pages::documents.show', ['document' => $document])
+            ->set('file', UploadedFile::fake()->create('payload.exe', 10, 'application/octet-stream'))
+            ->call('uploadVersion')->assertHasErrors(['file']);
+
+        $this->assertDatabaseCount('document_versions', 0);
+    }
+
+    public function test_recipient_acknowledges_then_forwards_the_document(): void
+    {
+        $sender = $this->employee();
+        $recipient = $this->employee();
+        $next = $this->employee();
+        $document = $this->routedDocument($sender, $recipient);
+
+        Livewire::actingAs($recipient)->test('pages::documents.show', ['document' => $document])->call('acknowledge')->assertHasNoErrors()
+            ->set('recipientId', (string) $next->id)->set('remarks', 'Please review')->call('forward')->assertHasNoErrors();
+
+        $this->assertSame('pending_acknowledgment', $document->fresh()->status);
+        $this->assertSame($next->id, $document->fresh()->current_handler_id);
+        $this->assertDatabaseHas('document_routes', ['from_user_id' => $recipient->id, 'to_user_id' => $next->id, 'route_type' => 'forward']);
+    }
+
+    public function test_recipient_declines_with_a_required_reason(): void
+    {
+        $sender = $this->employee();
+        $recipient = $this->employee();
+        $document = $this->routedDocument($sender, $recipient);
+
+        Livewire::actingAs($recipient)->test('pages::documents.show', ['document' => $document])->call('decline')->assertHasErrors(['reason'])
+            ->set('declineReason', 'Incorrect routing')->call('decline')->assertHasNoErrors();
+
+        $this->assertSame('in_progress', $document->fresh()->status);
+        $this->assertSame($sender->id, $document->fresh()->current_handler_id);
+    }
+
+    public function test_acknowledged_handler_returns_for_revision_and_creator_resubmits_a_new_version(): void
+    {
+        $creator = $this->employee();
+        $handler = $this->employee();
+        $document = $this->routedDocument($creator, $handler);
+        $route = $document->routes()->latest('id')->firstOrFail();
+        $route->update(['status' => 'acknowledged', 'acknowledged_at' => now()]);
+        $document->update(['status' => 'in_progress']);
+
+        Livewire::actingAs($handler)->test('pages::documents.show', ['document' => $document])
+            ->set('revisionReason', 'Update the signature block')->call('returnForRevision')->assertHasNoErrors();
+        $oldVersionId = $document->fresh()->current_version_id;
+
+        Livewire::actingAs($creator)->test('pages::documents.show', ['document' => $document->fresh()])
+            ->set('file', UploadedFile::fake()->create('revised.pdf', 20, 'application/pdf'))
+            ->set('changeSummary', 'Updated signature block')->call('uploadVersion')->assertHasNoErrors()
+            ->set('recipientId', (string) $handler->id)->call('submit')->assertHasNoErrors();
+
+        $this->assertSame(2, $document->versions()->count());
+        $this->assertNotSame($oldVersionId, $document->fresh()->current_version_id);
+        $this->assertDatabaseHas('document_routes', ['document_id' => $document->id, 'route_type' => 'revision_resubmission', 'document_version_id' => $document->fresh()->current_version_id]);
+    }
+
+    public function test_current_acknowledged_handler_completes_a_document(): void
+    {
+        $creator = $this->employee();
+        $handler = $this->employee();
+        $document = $this->routedDocument($creator, $handler);
+        $document->routes()->update(['status' => 'acknowledged', 'acknowledged_at' => now()]);
+        $document->update(['status' => 'in_progress']);
+
+        Livewire::actingAs($handler)->test('pages::documents.show', ['document' => $document])->call('complete')->assertHasNoErrors();
+
+        $this->assertSame('completed', $document->fresh()->status);
+        $this->assertNull($document->fresh()->current_handler_id);
+    }
+
+    public function test_version_download_is_private_and_scoped_to_its_document(): void
+    {
+        $owner = $this->employee();
+        $outsider = $this->employee();
+        $document = $this->document($owner);
+        $version = $this->version($document, $owner);
+        Storage::disk('local')->put($version->storage_path, 'private content');
+        $otherDocument = $this->document($owner, ['title' => 'Other']);
+
+        $this->actingAs($owner)->get(route('documents.versions.download', [$document, $version]))->assertDownload('memo.pdf');
+        $this->actingAs($owner)->get(route('documents.versions.download', [$otherDocument, $version]))->assertNotFound();
+        $this->actingAs($outsider)->get(route('documents.versions.download', [$document, $version]))->assertForbidden();
+    }
+
+    private function employee(): User
+    {
+        $division = Division::query()->create(['sso_division_id' => fake()->uuid(), 'name' => fake()->company(), 'code' => fake()->unique()->lexify('???'), 'is_active' => true]);
+
+        return User::factory()->create(['division_id' => $division->id]);
+    }
+
+    private function document(User $owner, array $attributes = []): Document
+    {
+        $type = DocumentType::query()->firstOrCreate(['code' => 'MEM'], ['name' => 'Memorandum', 'is_active' => true]);
+
+        return Document::query()->create(array_merge(['title' => 'Test document', 'document_type_id' => $type->id, 'origin_division_id' => $owner->division_id, 'created_by' => $owner->id, 'current_handler_id' => $owner->id, 'status' => 'draft'], $attributes));
+    }
+
+    private function version(Document $document, User $uploader): DocumentVersion
+    {
+        $version = $document->versions()->create(['version_number' => 1, 'uploaded_by' => $uploader->id, 'storage_path' => 'documents/test/memo.pdf', 'disk' => 'local', 'original_filename' => 'memo.pdf', 'mime_type' => 'application/pdf', 'file_size' => 15]);
+        $document->update(['current_version_id' => $version->id]);
+
+        return $version;
+    }
+
+    private function routedDocument(User $sender, User $recipient): Document
+    {
+        $document = $this->document($sender, ['tracking_number' => 'FDCP-2026-TEST', 'status' => 'pending_acknowledgment', 'current_handler_id' => $recipient->id, 'submitted_at' => now()]);
+        $version = $this->version($document, $sender);
+        DocumentRoute::query()->create(['document_id' => $document->id, 'document_version_id' => $version->id, 'from_user_id' => $sender->id, 'to_user_id' => $recipient->id, 'from_division_id' => $sender->division_id, 'to_division_id' => $recipient->division_id, 'route_type' => 'initial', 'status' => 'pending', 'forwarded_at' => now()]);
+
+        return $document->fresh();
+    }
+}

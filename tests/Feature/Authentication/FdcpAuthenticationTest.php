@@ -427,6 +427,8 @@ class FdcpAuthenticationTest extends TestCase
 
     public function test_application_routes_require_authentication(): void
     {
+        $this->withoutVite();
+
         $this->get('/')->assertRedirect('/login');
 
         $this->actingAs(User::factory()->create())

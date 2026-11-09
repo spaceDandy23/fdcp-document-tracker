@@ -5,6 +5,7 @@ namespace App\Actions\Documents;
 use App\Models\Document;
 use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -15,6 +16,14 @@ class ListDocuments
      * @return Collection<int, Document>
      */
     public function handle(): Collection
+    {
+        return $this->query()->latest()->get();
+    }
+
+    /**
+     * @return Builder<Document>
+     */
+    public function query(): Builder
     {
         $user = Auth::user();
 
@@ -40,8 +49,6 @@ class ListDocuments
                                 ->orWhere('to_division_id', $user->division_id));
                     }
                 });
-            })
-            ->latest()
-            ->get();
+            });
     }
 }
