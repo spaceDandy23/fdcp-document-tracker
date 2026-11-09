@@ -57,6 +57,42 @@ class DocumentDetailTest extends TestCase
         $this->assertSame('cancelled', $draft->fresh()->status);
     }
 
+    public function test_creator_can_switch_between_predefined_and_custom_document_types(): void
+    {
+        $creator = $this->employee();
+        $predefinedType = DocumentType::query()->firstOrCreate(['code' => 'MEM'], ['name' => 'Memorandum', 'is_active' => true]);
+        $customDocument = $this->document($creator, [
+            'document_type_id' => null,
+            'custom_document_type' => 'External endorsement',
+        ]);
+
+        Livewire::actingAs($creator)->test('pages::documents.show', ['document' => $customDocument])
+            ->assertSet('documentTypeId', 'other')
+            ->assertSet('customDocumentType', 'External endorsement')
+            ->set('documentTypeId', (string) $predefinedType->id)
+            ->assertSet('customDocumentType', '')
+            ->call('saveDraft')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('documents', [
+            'id' => $customDocument->id,
+            'document_type_id' => $predefinedType->id,
+            'custom_document_type' => null,
+        ]);
+
+        Livewire::actingAs($creator)->test('pages::documents.show', ['document' => $customDocument->fresh()])
+            ->set('documentTypeId', 'other')
+            ->set('customDocumentType', '  External certification  ')
+            ->call('saveDraft')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('documents', [
+            'id' => $customDocument->id,
+            'document_type_id' => null,
+            'custom_document_type' => 'External certification',
+        ]);
+    }
+
     public function test_upload_validation_rejects_unsupported_files(): void
     {
         $creator = $this->employee();
@@ -67,6 +103,25 @@ class DocumentDetailTest extends TestCase
             ->call('uploadVersion')->assertHasErrors(['file']);
 
         $this->assertDatabaseCount('document_versions', 0);
+    }
+
+    public function test_authorized_user_uploads_and_sees_supporting_attachments(): void
+    {
+        $creator = $this->employee();
+        $document = $this->document($creator);
+
+        Livewire::actingAs($creator)->test('pages::documents.show', ['document' => $document])
+            ->set('attachmentFiles', [
+                UploadedFile::fake()->create('support.pdf', 20, 'application/pdf'),
+                UploadedFile::fake()->create('appendix.docx', 20, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+            ])
+            ->call('uploadAttachments')
+            ->assertHasNoErrors()
+            ->assertSee('support.pdf')
+            ->assertSee('appendix.docx');
+
+        $this->assertSame(2, $document->attachments()->count());
+        $this->assertDatabaseHas('document_actions', ['document_id' => $document->id, 'action' => 'attachment_uploaded']);
     }
 
     public function test_recipient_acknowledges_then_forwards_the_document(): void

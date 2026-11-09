@@ -8,11 +8,14 @@ use App\Actions\Documents\ReturnDocumentForRevision;
 use App\Actions\Documents\SubmitDocument;
 use App\Actions\Documents\UpdateDocumentDraft;
 use App\Actions\Documents\UploadDocumentVersion;
+use App\Actions\Documents\UploadDocumentAttachment;
 use App\Models\Document;
 use App\Models\DocumentRoute;
 use App\Models\DocumentType;
 use App\Models\User;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rules\File;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -25,7 +28,9 @@ new #[Title('Document Details')] class extends Component {
     public string $title = '';
     public string $description = '';
     public string $documentTypeId = '';
+    public string $customDocumentType = '';
     public $file;
+    public array $attachmentFiles = [];
     public string $changeSummary = '';
     public string $recipientId = '';
     public string $remarks = '';
@@ -44,13 +49,23 @@ new #[Title('Document Details')] class extends Component {
     {
         $this->title = $this->document->title;
         $this->description = $this->document->description ?? '';
-        $this->documentTypeId = (string) $this->document->document_type_id;
+        $this->documentTypeId = $this->document->custom_document_type === null
+            ? (string) $this->document->document_type_id
+            : 'other';
+        $this->customDocumentType = $this->document->custom_document_type ?? '';
+    }
+
+    public function updatedDocumentTypeId(string $documentTypeId): void
+    {
+        if ($documentTypeId !== 'other') {
+            $this->customDocumentType = '';
+        }
     }
 
     private function refreshDocument(): void
     {
         $this->document = $this->document->fresh();
-        unset($this->pendingRoute, $this->versions, $this->timeline, $this->recipients, $this->previousHandlers);
+        unset($this->attachments, $this->pendingRoute, $this->versions, $this->timeline, $this->recipients, $this->previousHandlers);
     }
 
     #[Computed]
@@ -68,11 +83,13 @@ new #[Title('Document Details')] class extends Component {
     #[Computed]
     public function versions() { return $this->document->versions()->with('uploader:id,name')->latest('version_number')->get(); }
     #[Computed]
+    public function attachments() { return $this->document->attachments()->with('uploader:id,name')->latest('id')->get(); }
+    #[Computed]
     public function timeline() { return $this->document->actions()->with(['performer:id,name', 'documentRoute.sender:id,name', 'documentRoute.recipient:id,name'])->latest('id')->get(); }
 
     public function saveDraft(UpdateDocumentDraft $update): void
     {
-        $update->handle($this->document, ['title' => $this->title, 'description' => $this->description, 'document_type_id' => $this->documentTypeId]);
+        $update->handle($this->document, ['title' => $this->title, 'description' => $this->description, 'document_type_id' => $this->documentTypeId ?: 'other', 'custom_document_type' => $this->customDocumentType]);
         $this->refreshDocument(); session()->flash('success', 'Draft updated.');
     }
 
@@ -80,6 +97,25 @@ new #[Title('Document Details')] class extends Component {
     {
         $upload->handle($this->document, $this->file, $this->changeSummary ?: null);
         $this->reset('file', 'changeSummary'); $this->refreshDocument(); session()->flash('success', 'Document version uploaded.');
+    }
+
+    public function uploadAttachments(UploadDocumentAttachment $upload): void
+    {
+        Validator::make(['attachmentFiles' => $this->attachmentFiles], [
+            'attachmentFiles' => ['required', 'array', 'min:1'],
+            'attachmentFiles.*' => [
+                File::types(config('documents.attachment_types'))
+                    ->max(config('documents.attachment_max_upload_kb')),
+            ],
+        ])->validate();
+
+        foreach ($this->attachmentFiles as $attachmentFile) {
+            $upload->handle($this->document, $attachmentFile);
+        }
+
+        $this->reset('attachmentFiles');
+        $this->refreshDocument();
+        session()->flash('success', 'Supporting attachments uploaded.');
     }
 
     public function submit(SubmitDocument $submit): void
@@ -120,17 +156,17 @@ new #[Title('Document Details')] class extends Component {
         <div class="space-y-6">
             <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h2 class="mb-4 font-semibold">Document information</h2>
-                <dl class="grid gap-4 text-sm sm:grid-cols-2"><div><dt class="text-slate-500">Classification</dt><dd class="font-medium">{{ $document->documentType->name }}</dd></div><div><dt class="text-slate-500">Creator</dt><dd class="font-medium">{{ $document->creator->name }}</dd></div><div><dt class="text-slate-500">Originating division</dt><dd class="font-medium">{{ $document->originDivision->name }}</dd></div><div><dt class="text-slate-500">Current handler</dt><dd class="font-medium">{{ $document->currentHandler?->name ?? 'None' }}</dd></div><div><dt class="text-slate-500">Submitted</dt><dd>{{ $document->submitted_at?->format('M j, Y g:i A') ?? 'Not submitted' }}</dd></div><div><dt class="text-slate-500">Completed</dt><dd>{{ $document->completed_at?->format('M j, Y g:i A') ?? '—' }}</dd></div></dl>
+                <dl class="grid gap-4 text-sm sm:grid-cols-2"><div><dt class="text-slate-500">Classification</dt><dd class="font-medium">{{ $document->document_type_label }}</dd></div><div><dt class="text-slate-500">Creator</dt><dd class="font-medium">{{ $document->creator->name }}</dd></div><div><dt class="text-slate-500">Originating division</dt><dd class="font-medium">{{ $document->originDivision->name }}</dd></div><div><dt class="text-slate-500">Current handler</dt><dd class="font-medium">{{ $document->currentHandler?->name ?? 'None' }}</dd></div><div><dt class="text-slate-500">Submitted</dt><dd>{{ $document->submitted_at?->format('M j, Y g:i A') ?? 'Not submitted' }}</dd></div><div><dt class="text-slate-500">Completed</dt><dd>{{ $document->completed_at?->format('M j, Y g:i A') ?? '—' }}</dd></div></dl>
                 @if($document->description)<p class="mt-5 whitespace-pre-line border-t border-slate-100 pt-5 text-sm text-slate-700">{{ $document->description }}</p>@endif
             </section>
 
-            @can('updateDraft', $document)<section class="rounded-2xl border border-slate-200 bg-white p-6"><h2 class="mb-4 font-semibold">Edit draft</h2><form wire:submit="saveDraft" class="space-y-4"><input wire:model="title" aria-label="Title" class="w-full rounded-lg border border-slate-300 px-3 py-2"><select wire:model="documentTypeId" aria-label="Document type" class="w-full rounded-lg border border-slate-300 px-3 py-2">@foreach($this->documentTypes as $type)<option value="{{ $type->id }}" wire:key="edit-type-{{ $type->id }}">{{ $type->name }}</option>@endforeach</select><textarea wire:model="description" aria-label="Description" rows="4" class="w-full rounded-lg border border-slate-300 px-3 py-2"></textarea><button class="rounded-lg bg-fdcp-700 px-4 py-2 text-sm font-semibold text-white">Save changes</button></form></section>@endcan
+            @can('updateDraft', $document)<section class="rounded-2xl border border-slate-200 bg-white p-6"><h2 class="mb-4 font-semibold">Edit draft</h2><form wire:submit="saveDraft" class="space-y-4"><input wire:model="title" aria-label="Title" class="w-full rounded-lg border border-slate-300 px-3 py-2"><x-form-error name="title" /><select wire:model.live="documentTypeId" aria-label="Document type" class="w-full rounded-lg border border-slate-300 px-3 py-2"><option value="">Select a type</option>@foreach($this->documentTypes as $type)<option value="{{ $type->id }}" wire:key="edit-type-{{ $type->id }}">{{ $type->name }}</option>@endforeach<option value="other">Other / Specify</option></select><x-form-error name="document_type_id" />@if($documentTypeId === 'other')<input wire:model="customDocumentType" aria-label="Custom document type" maxlength="120" class="w-full rounded-lg border border-slate-300 px-3 py-2" required><x-form-error name="custom_document_type" />@endif<textarea wire:model="description" aria-label="Description" rows="4" class="w-full rounded-lg border border-slate-300 px-3 py-2"></textarea><x-form-error name="description" /><button class="rounded-lg bg-fdcp-700 px-4 py-2 text-sm font-semibold text-white">Save changes</button></form></section>@endcan
 
             @can('uploadVersion', $document)<section class="rounded-2xl border border-slate-200 bg-white p-6"><h2 class="font-semibold">Upload {{ $document->status === 'revision_requested' ? 'revision' : 'main document' }}</h2><p class="mt-1 text-sm text-slate-500">PDF or DOCX, up to {{ number_format(config('documents.max_upload_kb') / 1024) }} MB.</p><form wire:submit="uploadVersion" class="mt-4 space-y-4"><input wire:model="file" type="file" accept=".pdf,.docx" class="block w-full rounded-lg border border-slate-300 p-2 text-sm"><div wire:loading wire:target="file" class="text-sm text-fdcp-700">Uploading…</div><x-form-error name="file" />@if($document->status === 'revision_requested')<textarea wire:model="changeSummary" required placeholder="Required change summary" class="w-full rounded-lg border border-slate-300 px-3 py-2"></textarea><x-form-error name="change_summary" />@endif<button wire:loading.attr="disabled" class="rounded-lg bg-fdcp-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Save version</button></form></section>@endcan
 
             <section class="rounded-2xl border border-slate-200 bg-white p-6"><h2 class="mb-4 font-semibold">Versions</h2><div class="divide-y divide-slate-100">@forelse($this->versions as $version)<div class="flex items-center justify-between gap-4 py-3" wire:key="version-{{ $version->id }}"><div><p class="font-medium">Version {{ $version->version_number }} · {{ $version->original_filename }}</p><p class="text-xs text-slate-500">{{ $version->uploader->name }} · {{ number_format($version->file_size / 1024) }} KB · {{ $version->created_at->format('M j, Y') }}</p>@if($version->change_summary)<p class="mt-1 text-sm">{{ $version->change_summary }}</p>@endif</div><a href="{{ route('documents.versions.download', [$document, $version]) }}" class="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Download</a></div>@empty<p class="py-6 text-center text-sm text-slate-500">No main document uploaded.</p>@endforelse</div></section>
 
-            <section class="rounded-2xl border border-slate-200 bg-white p-6"><h2 class="mb-4 font-semibold">Supporting attachments</h2>@forelse($document->attachments as $attachment)<p class="py-2 text-sm" wire:key="attachment-{{ $attachment->id }}">{{ $attachment->original_filename }}</p>@empty<p class="text-sm text-slate-500">No attachments. Secure attachment operations are not yet available.</p>@endforelse</section>
+            <section class="rounded-2xl border border-slate-200 bg-white p-6"><h2 class="mb-4 font-semibold">Supporting attachments</h2>@can('uploadAttachment', $document)<form wire:submit="uploadAttachments" class="mb-5 rounded-xl border border-dashed border-slate-300 p-4"><p class="text-sm text-slate-500">PDF or DOCX, up to {{ number_format(config('documents.attachment_max_upload_kb') / 1024) }} MB each.</p><input wire:model="attachmentFiles" type="file" accept=".pdf,.docx" multiple class="mt-3 block w-full rounded-lg border border-slate-300 p-2 text-sm"><div wire:loading wire:target="attachmentFiles" class="mt-2 text-sm text-fdcp-700" role="status">Uploading selected attachments…</div>@foreach($attachmentFiles as $attachmentFile)<p class="mt-2 text-sm text-slate-700" wire:key="attachment-file-{{ $loop->index }}">Selected: {{ $attachmentFile->getClientOriginalName() }}</p>@endforeach<x-form-error name="attachmentFiles" />@foreach($errors->get('attachmentFiles.*') as $messages)@foreach($messages as $message)<p class="mt-1 text-sm text-red-600">{{ $message }}</p>@endforeach@endforeach<button wire:loading.attr="disabled" wire:target="uploadAttachments,attachmentFiles" class="mt-3 rounded-lg bg-fdcp-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Upload attachments</button></form>@endcan<div class="divide-y divide-slate-100">@forelse($this->attachments as $attachment)<div class="flex items-center justify-between gap-4 py-3" wire:key="attachment-{{ $attachment->id }}"><div class="min-w-0"><p class="truncate font-medium">{{ $attachment->original_filename }}</p><p class="text-xs text-slate-500">{{ $attachment->uploader->name }} · {{ number_format($attachment->file_size / 1024) }} KB · {{ $attachment->created_at->format('M j, Y') }}</p></div><a href="{{ route('documents.attachments.download', [$document, $attachment]) }}" class="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Download</a></div>@empty<p class="py-4 text-sm text-slate-500">No supporting attachments uploaded.</p>@endforelse</div></section>
         </div>
 
         <aside class="space-y-6">

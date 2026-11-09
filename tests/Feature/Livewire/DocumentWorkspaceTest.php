@@ -67,6 +67,46 @@ class DocumentWorkspaceTest extends TestCase
         Storage::disk('local')->assertExists($version->storage_path);
     }
 
+    public function test_employee_creates_a_draft_with_multiple_supporting_attachments(): void
+    {
+        Storage::fake('local');
+        config(['documents.disk' => 'local']);
+        $user = $this->employee();
+        $type = $this->type();
+
+        Livewire::actingAs($user)->test('pages::documents.create')
+            ->set('title', 'Budget endorsement')
+            ->set('documentTypeId', (string) $type->id)
+            ->set('attachmentFiles', [
+                UploadedFile::fake()->create('budget.pdf', 100, 'application/pdf'),
+                UploadedFile::fake()->create('endorsement.docx', 100, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+            ])
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertRedirect();
+
+        $document = Document::sole();
+        $this->assertSame(2, $document->attachments()->count());
+        $this->assertDatabaseCount('document_actions', 3);
+        Storage::disk('local')->assertExists($document->attachments()->pluck('storage_path')->all());
+    }
+
+    public function test_invalid_supporting_attachments_do_not_create_a_draft(): void
+    {
+        $user = $this->employee();
+        $type = $this->type();
+
+        Livewire::actingAs($user)->test('pages::documents.create')
+            ->set('title', 'Budget endorsement')
+            ->set('documentTypeId', (string) $type->id)
+            ->set('attachmentFiles', [UploadedFile::fake()->create('notes.txt', 10, 'text/plain')])
+            ->call('save')
+            ->assertHasErrors(['attachmentFiles.0']);
+
+        $this->assertDatabaseCount('documents', 0);
+        $this->assertDatabaseCount('document_attachments', 0);
+    }
+
     public function test_invalid_main_document_does_not_create_a_draft(): void
     {
         $user = $this->employee();

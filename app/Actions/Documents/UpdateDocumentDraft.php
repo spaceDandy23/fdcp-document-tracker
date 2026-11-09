@@ -3,15 +3,15 @@
 namespace App\Actions\Documents;
 
 use App\Models\Document;
+use App\Models\DocumentType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 
 class UpdateDocumentDraft
 {
     /**
-     * @param  array{title?: mixed, description?: mixed, document_type_id?: mixed}  $attributes
+     * @param  array{title?: mixed, description?: mixed, document_type_id?: mixed, custom_document_type?: mixed}  $attributes
      */
     public function handle(Document $document, array $attributes): Document
     {
@@ -23,14 +23,24 @@ class UpdateDocumentDraft
             'document_type_id' => [
                 'sometimes',
                 'required',
-                'integer',
-                Rule::exists('document_types', 'id')->where('is_active', true),
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value !== 'other' && (! is_numeric($value) || ! DocumentType::query()->whereKey($value)->where('is_active', true)->exists())) {
+                        $fail('Select an active document type or choose Other / Specify.');
+                    }
+                },
             ],
+            'custom_document_type' => ['required_if:document_type_id,other', 'nullable', 'string', 'max:120'],
         ])->validate();
 
         return DB::transaction(function () use ($document, $validated): Document {
             $lockedDocument = Document::query()->lockForUpdate()->findOrFail($document->id);
             Gate::authorize('updateDraft', $lockedDocument);
+            if (($validated['document_type_id'] ?? null) === 'other') {
+                $validated['document_type_id'] = null;
+                $validated['custom_document_type'] = trim($validated['custom_document_type']);
+            } elseif (array_key_exists('document_type_id', $validated)) {
+                $validated['custom_document_type'] = null;
+            }
             $lockedDocument->update($validated);
             $lockedDocument->actions()->create([
                 'performed_by' => auth()->id(),

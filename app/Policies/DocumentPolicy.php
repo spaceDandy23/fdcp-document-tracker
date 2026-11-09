@@ -49,6 +49,15 @@ class DocumentPolicy
             || ($user->id === $document->current_handler_id && $document->status === 'revision_requested');
     }
 
+    public function uploadAttachment(User $user, Document $document): bool
+    {
+        return $user->is_active && (
+            $this->updateDraft($user, $document)
+            || ($user->id === $document->current_handler_id
+                && in_array($document->status, ['in_progress', 'revision_requested'], true))
+        );
+    }
+
     public function submit(User $user, Document $document): bool
     {
         return $this->updateDraft($user, $document)

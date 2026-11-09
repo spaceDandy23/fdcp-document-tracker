@@ -37,7 +37,7 @@ class SubmitDocument
             $lockedDocument = Document::query()->lockForUpdate()->findOrFail($document->id);
             Gate::authorize('submit', $lockedDocument);
 
-            if (! $lockedDocument->documentType()->where('is_active', true)->exists()) {
+            if ($lockedDocument->custom_document_type === null && ! $lockedDocument->documentType()->where('is_active', true)->exists()) {
                 throw ValidationException::withMessages([
                     'document_type_id' => 'The selected document type is inactive.',
                 ]);

@@ -10,15 +10,15 @@
 
         @livewireStyles
     </head>
-    <body x-data="{ sidebarOpen: false }">
-        <div class="min-h-screen lg:flex">
+    <body x-data="{ sidebarOpen: false }" class="overflow-x-hidden">
+        <div class="min-h-dvh overflow-x-hidden lg:flex lg:h-dvh lg:overflow-hidden">
             <div x-show="sidebarOpen" x-cloak x-transition.opacity class="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" @click="sidebarOpen = false"></div>
-            <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'" class="fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-slate-950 text-white transition lg:static lg:translate-x-0">
+            <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'" class="fixed inset-y-0 left-0 z-40 flex h-dvh w-72 flex-col bg-slate-950 text-white transition lg:static lg:translate-x-0">
                 <div class="flex h-20 items-center gap-3 border-b border-white/10 px-6">
                     <div class="grid size-10 place-items-center rounded-xl bg-fdcp-600 font-bold">FD</div>
                     <div><p class="font-semibold">FDCP</p><p class="text-xs text-slate-400">Document Tracking System</p></div>
                 </div>
-                <nav aria-label="Primary" class="flex-1 space-y-1 overflow-y-auto p-4 text-sm">
+                <nav aria-label="Primary" class="min-h-0 flex-1 space-y-1 overflow-y-auto p-4 text-sm">
                     @foreach ([['home', 'Dashboard'], ['inbox', 'Inbox'], ['outgoing', 'Outgoing'], ['documents.index', 'My Documents'], ['documents.create', 'Create Document']] as [$routeName, $label])
                         <a wire:navigate href="{{ route($routeName) }}" @class(['flex rounded-lg px-3 py-2.5 font-medium transition', 'bg-fdcp-700 text-white' => request()->routeIs($routeName), 'text-slate-300 hover:bg-white/10 hover:text-white' => ! request()->routeIs($routeName)]) wire:key="nav-{{ $routeName }}">{{ $label }}</a>
                     @endforeach
@@ -36,7 +36,7 @@
                     <p class="truncate text-xs text-slate-400">{{ auth()->user()->division?->code ?? 'No division' }} · {{ auth()->user()->is_admin ? 'Administrator' : (auth()->user()->is_division_head ? 'Division Head' : 'Staff') }}</p>
                 </div>
             </aside>
-            <div class="min-w-0 flex-1">
+            <div class="min-w-0 flex-1 lg:h-dvh lg:overflow-y-auto">
                 <header class="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6">
                     <button type="button" class="rounded-lg p-2 text-slate-600 lg:hidden" @click="sidebarOpen = true" aria-label="Open navigation">☰</button>
                     <p class="hidden text-sm text-slate-500 sm:block">FDCP Internal Document Services</p>

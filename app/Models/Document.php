@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'title',
     'description',
     'document_type_id',
+    'custom_document_type',
     'origin_division_id',
     'created_by',
     'current_handler_id',
@@ -26,6 +27,11 @@ class Document extends Model
     public function documentType(): BelongsTo
     {
         return $this->belongsTo(DocumentType::class);
+    }
+
+    public function getDocumentTypeLabelAttribute(): string
+    {
+        return $this->custom_document_type ?: $this->documentType?->name ?? 'Unknown type';
     }
 
     public function originDivision(): BelongsTo

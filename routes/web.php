@@ -1,8 +1,10 @@
 <?php
 
+use App\Actions\Documents\DownloadDocumentAttachment;
 use App\Actions\Documents\DownloadDocumentVersion;
 use App\Http\Controllers\FdcpAuthenticationController;
 use App\Models\Document;
+use App\Models\DocumentAttachment;
 use App\Models\DocumentVersion;
 use Illuminate\Support\Facades\Route;
 
@@ -22,6 +24,11 @@ Route::middleware('auth')->group(function (): void {
 
         return $download->handle($version);
     })->name('documents.versions.download');
+    Route::get('/documents/{document}/attachments/{attachment}/download', function (Document $document, DocumentAttachment $attachment, DownloadDocumentAttachment $download) {
+        abort_unless($attachment->document_id === $document->id, 404);
+
+        return $download->handle($attachment);
+    })->name('documents.attachments.download');
     Route::livewire('/inbox', 'pages::inbox')->name('inbox');
     Route::livewire('/outgoing', 'pages::outgoing')->name('outgoing');
     Route::livewire('/division', 'pages::division')->name('division');

@@ -3,18 +3,18 @@
 namespace App\Actions\Documents;
 
 use App\Models\Document;
+use App\Models\DocumentType;
 use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 
 class CreateDocument
 {
     /**
-     * @param  array{title?: mixed, document_type_id?: mixed, description?: mixed}  $attributes
+     * @param  array{title?: mixed, document_type_id?: mixed, custom_document_type?: mixed, description?: mixed}  $attributes
      */
     public function handle(array $attributes): Document
     {
@@ -28,11 +28,15 @@ class CreateDocument
 
         $validated = Validator::make($attributes, [
             'title' => ['required', 'string', 'max:255'],
-            'document_type_id' => [
-                'required',
-                'integer',
-                Rule::exists('document_types', 'id')->where('is_active', true),
-            ],
+            'document_type_id' => ['required', function (string $attribute, mixed $value, \Closure $fail): void {
+                if ($value === 'other') {
+                    return;
+                }
+                if (! is_numeric($value) || ! DocumentType::query()->whereKey($value)->where('is_active', true)->exists()) {
+                    $fail('Select an active document type or choose Other / Specify.');
+                }
+            }],
+            'custom_document_type' => ['required_if:document_type_id,other', 'nullable', 'string', 'max:120'],
             'description' => ['nullable', 'string'],
         ])->validate();
 
@@ -41,7 +45,8 @@ class CreateDocument
                 'tracking_number' => null,
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
-                'document_type_id' => $validated['document_type_id'],
+                'document_type_id' => $validated['document_type_id'] === 'other' ? null : $validated['document_type_id'],
+                'custom_document_type' => $validated['document_type_id'] === 'other' ? trim($validated['custom_document_type']) : null,
                 'origin_division_id' => $creator->division_id,
                 'created_by' => $creator->id,
                 'current_handler_id' => $creator->id,
