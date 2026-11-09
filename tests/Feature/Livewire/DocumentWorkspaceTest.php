@@ -180,6 +180,21 @@ class DocumentWorkspaceTest extends TestCase
             ->set('status', 'completed')->assertDontSee('Needle memo');
     }
 
+    public function test_document_list_displays_custom_document_types_without_loading_a_relation(): void
+    {
+        $user = $this->employee();
+        $type = $this->type();
+        $this->document($user, $type, [
+            'title' => 'Custom classification',
+            'document_type_id' => null,
+            'custom_document_type' => 'External endorsement',
+        ]);
+
+        Livewire::actingAs($user)->test('pages::documents.index')
+            ->assertSee('Custom classification')
+            ->assertSee('External endorsement');
+    }
+
     public function test_staff_cannot_open_division_or_administration_pages(): void
     {
         $this->actingAs($this->employee())->get('/division')->assertForbidden();
