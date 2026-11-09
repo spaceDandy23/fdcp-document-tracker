@@ -119,6 +119,42 @@ class DocumentVersionTest extends TestCase
         app(DownloadDocumentVersion::class)->handle($version);
     }
 
+    public function test_pdf_version_preview_uses_private_inline_response_and_rejects_invalid_access(): void
+    {
+        Storage::fake('local');
+        $creator = $this->createEmployee();
+        $outsider = $this->createEmployee();
+        $document = $this->createDraft($creator);
+        $otherDocument = $this->createDraft($creator);
+        $this->actingAs($creator);
+        $version = app(UploadDocumentVersion::class)->handle($document, UploadedFile::fake()->create('preview.pdf', 100, 'application/pdf'));
+
+        $response = $this->get(route('documents.versions.preview', [$document, $version]));
+        $response->assertOk()
+            ->assertHeader('content-type', 'application/pdf')
+            ->assertHeader('content-disposition', 'inline; filename=preview.pdf')
+            ->assertHeader('content-security-policy', "sandbox; default-src 'none'")
+            ->assertHeader('x-content-type-options', 'nosniff')
+            ->assertHeader('x-frame-options', 'SAMEORIGIN');
+        $this->get(route('documents.versions.preview', [$otherDocument, $version]))->assertNotFound();
+        $this->actingAs($outsider)->get(route('documents.versions.preview', [$document, $version]))->assertForbidden();
+
+        $this->actingAs($creator);
+        Storage::disk('local')->delete($version->storage_path);
+        $this->get(route('documents.versions.preview', [$document, $version]))->assertNotFound();
+    }
+
+    public function test_only_pdf_versions_can_be_previewed(): void
+    {
+        Storage::fake('local');
+        $creator = $this->createEmployee();
+        $document = $this->createDraft($creator);
+        $this->actingAs($creator);
+        $version = app(UploadDocumentVersion::class)->handle($document, UploadedFile::fake()->create('preview.docx', 100, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'));
+
+        $this->get(route('documents.versions.preview', [$document, $version]))->assertStatus(415);
+    }
+
     private function createEmployee(): User
     {
         $division = Division::create([

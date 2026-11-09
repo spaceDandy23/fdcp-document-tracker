@@ -120,6 +120,40 @@ class DocumentAttachmentTest extends TestCase
         app(DownloadDocumentAttachment::class)->handle($attachment);
     }
 
+    public function test_pdf_attachment_preview_uses_private_inline_response_and_rejects_invalid_access(): void
+    {
+        $creator = $this->employee();
+        $outsider = $this->employee();
+        $document = $this->document($creator);
+        $otherDocument = $this->document($creator, ['title' => 'Other']);
+        $this->actingAs($creator);
+        $attachment = app(UploadDocumentAttachment::class)->handle($document, UploadedFile::fake()->create('preview.pdf', 10, 'application/pdf'));
+
+        $response = $this->get(route('documents.attachments.preview', [$document, $attachment]));
+        $response->assertOk()
+            ->assertHeader('content-type', 'application/pdf')
+            ->assertHeader('content-disposition', 'inline; filename=preview.pdf')
+            ->assertHeader('content-security-policy', "sandbox; default-src 'none'")
+            ->assertHeader('x-content-type-options', 'nosniff')
+            ->assertHeader('x-frame-options', 'SAMEORIGIN');
+        $this->get(route('documents.attachments.preview', [$otherDocument, $attachment]))->assertNotFound();
+        $this->actingAs($outsider)->get(route('documents.attachments.preview', [$document, $attachment]))->assertForbidden();
+
+        $this->actingAs($creator);
+        Storage::disk('local')->delete($attachment->storage_path);
+        $this->get(route('documents.attachments.preview', [$document, $attachment]))->assertNotFound();
+    }
+
+    public function test_only_pdf_attachments_can_be_previewed(): void
+    {
+        $creator = $this->employee();
+        $document = $this->document($creator);
+        $this->actingAs($creator);
+        $attachment = app(UploadDocumentAttachment::class)->handle($document, UploadedFile::fake()->create('preview.docx', 10, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'));
+
+        $this->get(route('documents.attachments.preview', [$document, $attachment]))->assertStatus(415);
+    }
+
     public function test_attachment_database_failures_remove_orphaned_files(): void
     {
         $creator = $this->employee();

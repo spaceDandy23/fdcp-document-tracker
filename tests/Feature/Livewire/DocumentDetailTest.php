@@ -224,6 +224,30 @@ class DocumentDetailTest extends TestCase
         $this->actingAs($outsider)->get(route('documents.versions.download', [$document, $version]))->assertForbidden();
     }
 
+    public function test_pdf_versions_and_attachments_open_the_preview_modal(): void
+    {
+        $creator = $this->employee();
+        $document = $this->document($creator);
+        $version = $this->version($document, $creator);
+        $attachment = $document->attachments()->create([
+            'uploaded_by' => $creator->id,
+            'storage_path' => 'documents/test/support.pdf',
+            'disk' => 'local',
+            'original_filename' => 'support.pdf',
+            'mime_type' => 'application/pdf',
+            'file_size' => 15,
+        ]);
+
+        Livewire::actingAs($creator)->test('pages::documents.show', ['document' => $document])
+            ->call('previewVersion', $version->id)
+            ->assertSet('previewFilename', 'memo.pdf')
+            ->assertSee('Full screen')
+            ->call('closePreview')
+            ->assertSet('previewUrl', '')
+            ->call('previewAttachment', $attachment->id)
+            ->assertSet('previewFilename', 'support.pdf');
+    }
+
     private function employee(): User
     {
         $division = Division::query()->create(['sso_division_id' => fake()->uuid(), 'name' => fake()->company(), 'code' => fake()->unique()->lexify('???'), 'is_active' => true]);

@@ -2,6 +2,8 @@
 
 use App\Actions\Documents\DownloadDocumentAttachment;
 use App\Actions\Documents\DownloadDocumentVersion;
+use App\Actions\Documents\PreviewDocumentAttachment;
+use App\Actions\Documents\PreviewDocumentVersion;
 use App\Http\Controllers\FdcpAuthenticationController;
 use App\Models\Document;
 use App\Models\DocumentAttachment;
@@ -24,11 +26,21 @@ Route::middleware('auth')->group(function (): void {
 
         return $download->handle($version);
     })->name('documents.versions.download');
+    Route::get('/documents/{document}/versions/{version}/preview', function (Document $document, DocumentVersion $version, PreviewDocumentVersion $preview) {
+        abort_unless($version->document_id === $document->id, 404);
+
+        return $preview->handle($version);
+    })->name('documents.versions.preview');
     Route::get('/documents/{document}/attachments/{attachment}/download', function (Document $document, DocumentAttachment $attachment, DownloadDocumentAttachment $download) {
         abort_unless($attachment->document_id === $document->id, 404);
 
         return $download->handle($attachment);
     })->name('documents.attachments.download');
+    Route::get('/documents/{document}/attachments/{attachment}/preview', function (Document $document, DocumentAttachment $attachment, PreviewDocumentAttachment $preview) {
+        abort_unless($attachment->document_id === $document->id, 404);
+
+        return $preview->handle($attachment);
+    })->name('documents.attachments.preview');
     Route::livewire('/inbox', 'pages::inbox')->name('inbox');
     Route::livewire('/outgoing', 'pages::outgoing')->name('outgoing');
     Route::livewire('/division', 'pages::division')->name('division');
