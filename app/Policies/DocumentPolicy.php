@@ -58,6 +58,11 @@ class DocumentPolicy
         );
     }
 
+    public function removeAttachment(User $user, Document $document): bool
+    {
+        return $this->uploadAttachment($user, $document);
+    }
+
     public function submit(User $user, Document $document): bool
     {
         return $this->updateDraft($user, $document)

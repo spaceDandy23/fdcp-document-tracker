@@ -5,12 +5,14 @@ use App\Actions\Documents\CompleteDocument;
 use App\Actions\Documents\DeclineDocumentRoute;
 use App\Actions\Documents\ForwardDocument;
 use App\Actions\Documents\ReturnDocumentForRevision;
+use App\Actions\Documents\RemoveDocumentAttachment;
 use App\Actions\Documents\SubmitDocument;
 use App\Actions\Documents\UpdateDocumentDraft;
 use App\Actions\Documents\UploadDocumentVersion;
 use App\Actions\Documents\UploadDocumentAttachment;
 use App\Models\Document;
 use App\Models\DocumentRoute;
+use App\Models\DocumentAttachment;
 use App\Models\DocumentType;
 use App\Models\User;
 use Illuminate\Support\Facades\Gate;
@@ -31,6 +33,7 @@ new #[Title('Document Details')] class extends Component {
     public string $customDocumentType = '';
     public $file;
     public array $attachmentFiles = [];
+    public array $removalReasons = [];
     public string $changeSummary = '';
     public string $recipientId = '';
     public string $remarks = '';
@@ -65,7 +68,7 @@ new #[Title('Document Details')] class extends Component {
     private function refreshDocument(): void
     {
         $this->document = $this->document->fresh();
-        unset($this->attachments, $this->pendingRoute, $this->versions, $this->timeline, $this->recipients, $this->previousHandlers);
+        unset($this->attachments, $this->removedAttachments, $this->pendingRoute, $this->versions, $this->timeline, $this->recipients, $this->previousHandlers);
     }
 
     #[Computed]
@@ -84,6 +87,8 @@ new #[Title('Document Details')] class extends Component {
     public function versions() { return $this->document->versions()->with('uploader:id,name')->latest('version_number')->get(); }
     #[Computed]
     public function attachments() { return $this->document->attachments()->with('uploader:id,name')->latest('id')->get(); }
+    #[Computed]
+    public function removedAttachments() { return $this->document->attachments()->onlyTrashed()->with('uploader:id,name')->latest('deleted_at')->get(); }
     #[Computed]
     public function timeline() { return $this->document->actions()->with(['performer:id,name', 'documentRoute.sender:id,name', 'documentRoute.recipient:id,name'])->latest('id')->get(); }
 
@@ -116,6 +121,18 @@ new #[Title('Document Details')] class extends Component {
         $this->reset('attachmentFiles');
         $this->refreshDocument();
         session()->flash('success', 'Supporting attachments uploaded.');
+    }
+
+    public function removeAttachment(int $attachmentId, RemoveDocumentAttachment $remove): void
+    {
+        $attachment = DocumentAttachment::query()->withTrashed()->findOrFail($attachmentId);
+        $remove->handle($this->document, $attachment, [
+            'reason' => $this->removalReasons[$attachmentId] ?? null,
+        ]);
+
+        unset($this->removalReasons[$attachmentId]);
+        $this->refreshDocument();
+        session()->flash('success', 'Supporting attachment removed.');
     }
 
     public function submit(SubmitDocument $submit): void
@@ -166,7 +183,7 @@ new #[Title('Document Details')] class extends Component {
 
             <section class="rounded-2xl border border-slate-200 bg-white p-6"><h2 class="mb-4 font-semibold">Versions</h2><div class="divide-y divide-slate-100">@forelse($this->versions as $version)<div class="flex items-center justify-between gap-4 py-3" wire:key="version-{{ $version->id }}"><div><p class="font-medium">Version {{ $version->version_number }} · {{ $version->original_filename }}</p><p class="text-xs text-slate-500">{{ $version->uploader->name }} · {{ number_format($version->file_size / 1024) }} KB · {{ $version->created_at->format('M j, Y') }}</p>@if($version->change_summary)<p class="mt-1 text-sm">{{ $version->change_summary }}</p>@endif</div><a href="{{ route('documents.versions.download', [$document, $version]) }}" class="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Download</a></div>@empty<p class="py-6 text-center text-sm text-slate-500">No main document uploaded.</p>@endforelse</div></section>
 
-            <section class="rounded-2xl border border-slate-200 bg-white p-6"><h2 class="mb-4 font-semibold">Supporting attachments</h2>@can('uploadAttachment', $document)<form wire:submit="uploadAttachments" class="mb-5 rounded-xl border border-dashed border-slate-300 p-4"><p class="text-sm text-slate-500">PDF or DOCX, up to {{ number_format(config('documents.attachment_max_upload_kb') / 1024) }} MB each.</p><div x-data="{ uploading: false, progress: 0 }" x-on:livewire-upload-start="uploading = true" x-on:livewire-upload-finish="uploading = false" x-on:livewire-upload-error="uploading = false" x-on:livewire-upload-progress="progress = $event.detail.progress"><input wire:model="attachmentFiles" type="file" accept=".pdf,.docx" multiple class="mt-3 block w-full rounded-lg border border-slate-300 p-2 text-sm"><div x-show="uploading" x-cloak class="mt-2 text-sm text-fdcp-700" role="status">Uploading selected attachments: <span x-text="progress + '%'"></span></div></div>@foreach($attachmentFiles as $attachmentFile)<p class="mt-2 text-sm text-slate-700" wire:key="attachment-file-{{ $loop->index }}">Selected: {{ $attachmentFile->getClientOriginalName() }}</p>@endforeach<x-form-error name="attachmentFiles" />@foreach($errors->get('attachmentFiles.*') as $messages)@foreach($messages as $message)<p class="mt-1 text-sm text-red-600">{{ $message }}</p>@endforeach@endforeach<button wire:loading.attr="disabled" wire:target="uploadAttachments,attachmentFiles" class="mt-3 rounded-lg bg-fdcp-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Upload attachments</button></form>@endcan<div class="divide-y divide-slate-100">@forelse($this->attachments as $attachment)<div class="flex items-center justify-between gap-4 py-3" wire:key="attachment-{{ $attachment->id }}"><div class="min-w-0"><p class="truncate font-medium">{{ $attachment->original_filename }}</p><p class="text-xs text-slate-500">{{ $attachment->uploader->name }} · {{ number_format($attachment->file_size / 1024) }} KB · {{ $attachment->created_at->format('M j, Y') }}</p></div><a href="{{ route('documents.attachments.download', [$document, $attachment]) }}" class="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Download</a></div>@empty<p class="py-4 text-sm text-slate-500">No supporting attachments uploaded.</p>@endforelse</div></section>
+            <section class="rounded-2xl border border-slate-200 bg-white p-6"><h2 class="mb-4 font-semibold">Supporting attachments</h2>@can('uploadAttachment', $document)<form wire:submit="uploadAttachments" class="mb-5 rounded-xl border border-dashed border-slate-300 p-4"><p class="text-sm text-slate-500">PDF or DOCX, up to {{ number_format(config('documents.attachment_max_upload_kb') / 1024) }} MB each.</p><div x-data="{ uploading: false, progress: 0 }" x-on:livewire-upload-start="uploading = true" x-on:livewire-upload-finish="uploading = false" x-on:livewire-upload-error="uploading = false" x-on:livewire-upload-progress="progress = $event.detail.progress"><input wire:model="attachmentFiles" type="file" accept=".pdf,.docx" multiple class="mt-3 block w-full rounded-lg border border-slate-300 p-2 text-sm"><div x-show="uploading" x-cloak class="mt-2 text-sm text-fdcp-700" role="status">Uploading selected attachments: <span x-text="progress + '%'"></span></div></div>@foreach($attachmentFiles as $attachmentFile)<p class="mt-2 text-sm text-slate-700" wire:key="attachment-file-{{ $loop->index }}">Selected: {{ $attachmentFile->getClientOriginalName() }}</p>@endforeach<x-form-error name="attachmentFiles" />@foreach($errors->get('attachmentFiles.*') as $messages)@foreach($messages as $message)<p class="mt-1 text-sm text-red-600">{{ $message }}</p>@endforeach@endforeach<button wire:loading.attr="disabled" wire:target="uploadAttachments,attachmentFiles" class="mt-3 rounded-lg bg-fdcp-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Upload attachments</button></form>@endcan<div class="divide-y divide-slate-100">@forelse($this->attachments as $attachment)<div class="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between" wire:key="attachment-{{ $attachment->id }}"><div class="min-w-0"><p class="truncate font-medium">{{ $attachment->original_filename }}</p><p class="text-xs text-slate-500">{{ $attachment->uploader->name }} · {{ number_format($attachment->file_size / 1024) }} KB · {{ $attachment->created_at->format('M j, Y') }}</p></div><div class="flex flex-wrap items-center gap-2"><a href="{{ route('documents.attachments.download', [$document, $attachment]) }}" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Download</a>@can('removeAttachment', $document)<input wire:model="removalReasons.{{ $attachment->id }}" aria-label="Removal reason for {{ $attachment->original_filename }}" placeholder="Removal reason" class="w-48 rounded-lg border border-slate-300 px-3 py-2 text-sm"><button wire:click="removeAttachment({{ $attachment->id }})" wire:confirm="Remove this attachment? The file will remain in the historical record." class="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700">Remove</button>@endcan</div><x-form-error name="reason" /></div>@empty<p class="py-4 text-sm text-slate-500">No supporting attachments uploaded.</p>@endforelse</div>@if($this->removedAttachments->isNotEmpty())<div class="mt-5 border-t border-slate-100 pt-4"><h3 class="text-sm font-semibold">Removed attachments</h3><div class="mt-2 divide-y divide-slate-100">@foreach($this->removedAttachments as $attachment)<div class="py-3 text-sm" wire:key="removed-attachment-{{ $attachment->id }}"><p class="font-medium text-slate-600">{{ $attachment->original_filename }}</p><p class="text-xs text-slate-500">Uploaded by {{ $attachment->uploader->name }} · removed {{ $attachment->deleted_at->format('M j, Y g:i A') }}</p></div>@endforeach</div></div>@endif</section>
         </div>
 
         <aside class="space-y-6">

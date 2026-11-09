@@ -124,6 +124,27 @@ class DocumentDetailTest extends TestCase
         $this->assertDatabaseHas('document_actions', ['document_id' => $document->id, 'action' => 'attachment_uploaded']);
     }
 
+    public function test_creator_removes_a_supporting_attachment_with_a_reason(): void
+    {
+        $creator = $this->employee();
+        $document = $this->document($creator);
+
+        Livewire::actingAs($creator)->test('pages::documents.show', ['document' => $document])
+            ->set('attachmentFiles', [UploadedFile::fake()->create('obsolete.pdf', 20, 'application/pdf')])
+            ->call('uploadAttachments')
+            ->assertHasNoErrors();
+
+        $attachment = $document->attachments()->sole();
+
+        Livewire::actingAs($creator)->test('pages::documents.show', ['document' => $document->fresh()])
+            ->set("removalReasons.{$attachment->id}", 'Replaced with a corrected attachment.')
+            ->call('removeAttachment', $attachment->id)
+            ->assertHasNoErrors()
+            ->assertSee('Removed attachments');
+
+        $this->assertSoftDeleted('document_attachments', ['id' => $attachment->id]);
+    }
+
     public function test_recipient_acknowledges_then_forwards_the_document(): void
     {
         $sender = $this->employee();
