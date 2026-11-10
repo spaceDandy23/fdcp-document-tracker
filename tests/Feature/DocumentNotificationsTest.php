@@ -72,6 +72,27 @@ class DocumentNotificationsTest extends TestCase
         $this->assertSame(1, $secondRecipient->notifications()->count());
     }
 
+    public function test_acknowledgment_notifies_the_route_sender_with_a_concise_event_payload(): void
+    {
+        $sender = $this->employee();
+        $recipient = $this->employee();
+        $document = $this->draft($sender, ['status' => 'pending_acknowledgment', 'current_handler_id' => $recipient->id]);
+        $version = $this->version($document, $sender);
+        $route = $this->route($document, $version, $sender, $recipient, 'initial', 'pending');
+        $this->actingAs($recipient);
+
+        app(AcknowledgeDocumentRoute::class)->handle($route);
+
+        $notification = $sender->notifications()->sole();
+        $this->assertSame('document_acknowledged', $notification->data['event_type']);
+        $this->assertSame($document->id, $notification->data['document_id']);
+        $this->assertSame($document->tracking_number, $notification->data['tracking_number']);
+        $this->assertSame('Document '.$document->tracking_number.' was acknowledged.', $notification->data['message']);
+        $this->assertSame(['event_type', 'document_id', 'tracking_number', 'message'], array_keys($notification->data));
+        $this->assertSame(0, $recipient->notifications()->count());
+        $this->assertSame('acknowledged', $route->fresh()->status);
+    }
+
     public function test_declining_a_route_notifies_the_sender_and_not_the_declining_recipient(): void
     {
         $sender = $this->employee();

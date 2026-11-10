@@ -95,7 +95,12 @@ class DocumentPolicy
 
     public function returnForRevision(User $user, Document $document): bool
     {
-        return $user->id === $document->current_handler_id && $document->status === 'in_progress';
+        return $user->id === $document->current_handler_id
+            && $document->status === 'in_progress'
+            && $document->routes()
+                ->where('to_user_id', $user->id)
+                ->where('status', 'acknowledged')
+                ->exists();
     }
 
     public function complete(User $user, Document $document): bool

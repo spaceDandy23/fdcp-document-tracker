@@ -104,7 +104,7 @@ new class extends Component
 };
 ?>
 
-<div class="relative" wire:poll.60s>
+<div class="relative" wire:poll.10s>
     <button type="button" wire:click="toggle" aria-label="Notifications, {{ $this->unreadCount }} unread" aria-expanded="{{ $isOpen ? 'true' : 'false' }}" aria-controls="notification-menu" class="relative inline-flex size-10 items-center justify-center rounded-lg border border-slate-300 text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fdcp-700">
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-5-5.9V4a1 1 0 0 0-2 0v1.1A6 6 0 0 0 6 11v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 0 1-6 0m6 0H9"/></svg>
         @if ($this->unreadCount > 0)<span class="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-700 px-1 text-center text-xs font-semibold leading-5 text-white">{{ $this->unreadCount > 99 ? '99+' : $this->unreadCount }}</span>@endif

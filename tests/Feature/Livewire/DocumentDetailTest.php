@@ -173,6 +173,18 @@ class DocumentDetailTest extends TestCase
         $this->assertSame($sender->id, $document->fresh()->current_handler_id);
     }
 
+    public function test_original_sender_does_not_see_return_for_revision_when_no_previous_handler_is_eligible(): void
+    {
+        $sender = $this->employee();
+        $recipient = $this->employee();
+        $document = $this->routedDocument($sender, $recipient);
+        $document->routes()->update(['status' => 'declined', 'declined_at' => now()]);
+        $document->update(['status' => 'in_progress', 'current_handler_id' => $sender->id]);
+
+        Livewire::actingAs($sender)->test('pages::documents.show', ['document' => $document->fresh()])
+            ->assertDontSee('Return for revision');
+    }
+
     public function test_acknowledged_handler_returns_for_revision_and_creator_resubmits_a_new_version(): void
     {
         $creator = $this->employee();
@@ -183,10 +195,13 @@ class DocumentDetailTest extends TestCase
         $document->update(['status' => 'in_progress']);
 
         Livewire::actingAs($handler)->test('pages::documents.show', ['document' => $document])
+            ->assertSee('Return for revision')
             ->set('revisionReason', 'Update the signature block')->call('returnForRevision')->assertHasNoErrors();
         $oldVersionId = $document->fresh()->current_version_id;
 
         Livewire::actingAs($creator)->test('pages::documents.show', ['document' => $document->fresh()])
+            ->assertDontSee('Return for revision')
+            ->assertSee('Resubmit revision')
             ->set('file', UploadedFile::fake()->create('revised.pdf', 20, 'application/pdf'))
             ->set('changeSummary', 'Updated signature block')->call('uploadVersion')->assertHasNoErrors()
             ->set('recipientId', (string) $handler->id)->call('submit')->assertHasNoErrors();

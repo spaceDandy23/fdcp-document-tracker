@@ -4,6 +4,7 @@ namespace App\Actions\Documents;
 
 use App\Models\Document;
 use App\Models\DocumentRoute;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
@@ -30,6 +31,16 @@ class AcknowledgeDocumentRoute
                 'performed_by' => auth()->id(),
                 'action' => 'acknowledged',
             ]);
+
+            $sender = User::query()->find($lockedRoute->from_user_id);
+            if ($sender !== null) {
+                app(NotifyDocumentWorkflow::class)->handle(
+                    $sender,
+                    $lockedDocument,
+                    'document_acknowledged',
+                    "Document {$lockedDocument->tracking_number} was acknowledged.",
+                );
+            }
 
             return $lockedRoute;
         });
