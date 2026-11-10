@@ -153,11 +153,30 @@ class DocumentDetailTest extends TestCase
         $document = $this->routedDocument($sender, $recipient);
 
         Livewire::actingAs($recipient)->test('pages::documents.show', ['document' => $document])->call('acknowledge')->assertHasNoErrors()
+            ->assertDontSeeHtml('<option value="'.$sender->id.'" wire:key="forward-recipient-'.$sender->id.'">')
+            ->assertSeeHtml('<option value="'.$next->id.'" wire:key="forward-recipient-'.$next->id.'">')
             ->set('recipientId', (string) $next->id)->set('remarks', 'Please review')->call('forward')->assertHasNoErrors();
 
         $this->assertSame('pending_acknowledgment', $document->fresh()->status);
         $this->assertSame($next->id, $document->fresh()->current_handler_id);
         $this->assertDatabaseHas('document_routes', ['from_user_id' => $recipient->id, 'to_user_id' => $next->id, 'route_type' => 'forward']);
+    }
+
+    public function test_forwarding_back_to_the_immediate_sender_is_rejected_even_if_livewire_is_tampered_with(): void
+    {
+        $sender = $this->employee();
+        $recipient = $this->employee();
+        $document = $this->routedDocument($sender, $recipient);
+        $document->routes()->update(['status' => 'acknowledged', 'acknowledged_at' => now()]);
+        $document->update(['status' => 'in_progress']);
+
+        Livewire::actingAs($recipient)->test('pages::documents.show', ['document' => $document])
+            ->assertDontSeeHtml('<option value="'.$sender->id.'" wire:key="forward-recipient-'.$sender->id.'">')
+            ->set('recipientId', (string) $sender->id)
+            ->call('forward')
+            ->assertHasErrors(['recipient_id']);
+
+        $this->assertDatabaseCount('document_routes', 1);
     }
 
     public function test_recipient_declines_with_a_required_reason(): void

@@ -63,6 +63,18 @@ class ForwardDocument
                 ]);
             }
 
+            $immediateSenderId = $lockedDocument->routes()
+                ->where('to_user_id', $sender->id)
+                ->where('status', 'acknowledged')
+                ->latest('id')
+                ->value('from_user_id');
+
+            if ($immediateSenderId !== null && $recipient->id === $immediateSenderId) {
+                throw ValidationException::withMessages([
+                    'recipient_id' => 'Use Return for revision to send the document back to its immediate sender.',
+                ]);
+            }
+
             $route = $lockedDocument->routes()->create([
                 'document_version_id' => $lockedDocument->current_version_id,
                 'from_user_id' => $sender->id,

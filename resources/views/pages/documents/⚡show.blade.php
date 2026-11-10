@@ -15,6 +15,7 @@ use App\Models\DocumentRoute;
 use App\Models\DocumentAttachment;
 use App\Models\DocumentType;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rules\File;
@@ -70,13 +71,40 @@ new #[Title('Document Details')] class extends Component {
     private function refreshDocument(): void
     {
         $this->document = $this->document->fresh();
-        unset($this->attachments, $this->removedAttachments, $this->pendingRoute, $this->versions, $this->timeline, $this->recipients, $this->previousHandlers);
+        unset($this->attachments, $this->removedAttachments, $this->pendingRoute, $this->versions, $this->timeline, $this->recipients, $this->forwardRecipients, $this->previousHandlers);
     }
 
     #[Computed]
     public function documentTypes() { return DocumentType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']); }
     #[Computed]
-    public function recipients() { return User::query()->where('is_active', true)->whereNotNull('division_id')->whereKeyNot(auth()->id())->with('division:id,code')->orderBy('name')->get(['id', 'name', 'division_id']); }
+    public function recipients()
+    {
+        return $this->activeRecipientsQuery()->get(['id', 'name', 'division_id']);
+    }
+
+    #[Computed]
+    public function forwardRecipients()
+    {
+        $immediateSenderId = $this->document->routes()
+            ->where('to_user_id', auth()->id())
+            ->where('status', 'acknowledged')
+            ->latest('id')
+            ->value('from_user_id');
+
+        return $this->activeRecipientsQuery()
+            ->when($immediateSenderId !== null, fn (Builder $query) => $query->whereKeyNot($immediateSenderId))
+            ->get(['id', 'name', 'division_id']);
+    }
+
+    private function activeRecipientsQuery(): Builder
+    {
+        return User::query()
+            ->where('is_active', true)
+            ->whereNotNull('division_id')
+            ->whereKeyNot(auth()->id())
+            ->with('division:id,code')
+            ->orderBy('name');
+    }
     #[Computed]
     public function previousHandlers()
     {
@@ -216,7 +244,7 @@ new #[Title('Document Details')] class extends Component {
 
             @can('submit', $document)<section class="rounded-2xl border border-slate-200 bg-white p-5"><h2 class="font-semibold">{{ $document->status === 'revision_requested' ? 'Resubmit revision' : 'Submit document' }}</h2><select wire:model="recipientId" class="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Select one recipient</option>@foreach($this->recipients as $recipient)<option value="{{ $recipient->id }}" wire:key="submit-recipient-{{ $recipient->id }}">{{ $recipient->name }} ({{ $recipient->division->code }})</option>@endforeach</select><x-form-error name="recipient_id" /><x-form-error name="document" /><button wire:click="submit" wire:confirm="Submit this document?" class="mt-3 w-full rounded-lg bg-fdcp-700 px-4 py-2 text-sm font-semibold text-white">Submit</button><p class="mt-2 text-xs text-slate-500">Only synchronized employees who have logged in are available.</p></section>@endcan
 
-            @can('forward', $document)<section class="rounded-2xl border border-slate-200 bg-white p-5"><h2 class="font-semibold">Forward document</h2><select wire:model="recipientId" class="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Select recipient</option>@foreach($this->recipients as $recipient)<option value="{{ $recipient->id }}" wire:key="forward-recipient-{{ $recipient->id }}">{{ $recipient->name }} ({{ $recipient->division->code }})</option>@endforeach</select><textarea wire:model="remarks" placeholder="Remarks (optional)" class="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></textarea><button wire:click="forward" wire:confirm="Forward this document?" class="mt-3 w-full rounded-lg bg-fdcp-700 px-4 py-2 text-sm font-semibold text-white">Forward</button></section>@endcan
+            @can('forward', $document)<section class="rounded-2xl border border-slate-200 bg-white p-5"><h2 class="font-semibold">Forward document</h2><select wire:model="recipientId" class="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Select recipient</option>@foreach($this->forwardRecipients as $recipient)<option value="{{ $recipient->id }}" wire:key="forward-recipient-{{ $recipient->id }}">{{ $recipient->name }} ({{ $recipient->division->code }})</option>@endforeach</select><textarea wire:model="remarks" placeholder="Remarks (optional)" class="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></textarea><button wire:click="forward" wire:confirm="Forward this document?" class="mt-3 w-full rounded-lg bg-fdcp-700 px-4 py-2 text-sm font-semibold text-white">Forward</button></section>@endcan
 
             @can('returnForRevision', $document)<section class="rounded-2xl border border-slate-200 bg-white p-5"><h2 class="font-semibold">Return for revision</h2><textarea wire:model="revisionReason" required placeholder="Revision reason" class="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></textarea><select wire:model="revisionRecipientId" class="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Immediate sender (default)</option>@foreach($this->previousHandlers as $handler)<option value="{{ $handler->id }}" wire:key="previous-handler-{{ $handler->id }}">{{ $handler->name }}</option>@endforeach</select><button wire:click="returnForRevision" wire:confirm="Return this document for revision?" class="mt-3 w-full rounded-lg border border-orange-300 px-4 py-2 text-sm font-semibold text-orange-800">Return for revision</button></section>@endcan
 
