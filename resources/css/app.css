@@ -17,4 +17,6 @@
     [x-cloak] { display: none !important; }
     body { @apply bg-slate-50 text-slate-900 antialiased; }
     button, a, input, select, textarea { @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fdcp-600; }
+    button:not(:disabled) { @apply cursor-pointer; }
+    button:disabled { @apply cursor-not-allowed; }
 }
