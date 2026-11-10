@@ -9,6 +9,7 @@ use App\Models\DocumentAction;
 use App\Models\DocumentRoute;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -101,10 +102,22 @@ class DocumentReportQuery
      */
     public function agingDocuments(array $filters = []): Collection
     {
+        return $this->agingDocumentQuery($filters)->get();
+    }
+
+    /** @param array<string, mixed> $filters */
+    public function paginateAgingDocuments(array $filters = [], int $perPage = 15): LengthAwarePaginator
+    {
+        return $this->agingDocumentQuery($filters)->paginate($perPage, pageName: 'agingPage');
+    }
+
+    /** @param array<string, mixed> $filters */
+    private function agingDocumentQuery(array $filters): Builder
+    {
         return $this->documents($filters)->whereIn('status', ['pending_acknowledgment', 'in_progress', 'revision_requested'])
             ->with(['creator:id,name', 'currentHandler:id,name', 'documentType:id,name'])
             ->withMax('actions as last_workflow_at', 'created_at')
-            ->orderByRaw('coalesce(last_workflow_at, submitted_at)')->get();
+            ->orderByRaw('coalesce(last_workflow_at, submitted_at)');
     }
 
     public function agingBucket(Document $document): string

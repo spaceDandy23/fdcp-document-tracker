@@ -109,6 +109,28 @@ class DocumentReportingTest extends TestCase
         $this->assertStringContainsString("'=SUM(1,1)", $response->streamedContent());
     }
 
+    public function test_aging_documents_are_paginated(): void
+    {
+        $admin = $this->employee(['is_admin' => true]);
+        $type = $this->type();
+
+        foreach (range(1, 16) as $number) {
+            $this->document($admin, $type, [
+                'title' => 'Aging document '.str_pad((string) $number, 2, '0', STR_PAD_LEFT),
+                'status' => 'in_progress',
+                'submitted_at' => now()->subDay(),
+            ]);
+        }
+
+        Livewire::actingAs($admin)->test('pages::reports')
+            ->assertSee('Aging document 01')
+            ->assertDontSee('Aging document 16')
+            ->assertSee('Next')
+            ->call('setPage', 2, 'agingPage')
+            ->assertSee('Aging document 16')
+            ->assertDontSee('Aging document 01');
+    }
+
     private function division(string $code): Division
     {
         return Division::query()->create(['sso_division_id' => 'report:'.$code, 'name' => 'Division '.$code, 'code' => $code, 'is_active' => true]);
