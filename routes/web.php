@@ -5,6 +5,7 @@ use App\Actions\Documents\DownloadDocumentVersion;
 use App\Actions\Documents\PreviewDocumentAttachment;
 use App\Actions\Documents\PreviewDocumentVersion;
 use App\Http\Controllers\FdcpAuthenticationController;
+use App\Http\Controllers\ReportExportController;
 use App\Models\Document;
 use App\Models\DocumentAttachment;
 use App\Models\DocumentVersion;
@@ -44,6 +45,10 @@ Route::middleware('auth')->group(function (): void {
     Route::livewire('/inbox', 'pages::inbox')->name('inbox');
     Route::livewire('/outgoing', 'pages::outgoing')->name('outgoing');
     Route::livewire('/division', 'pages::division')->name('division');
+    Route::livewire('/reports', 'pages::reports')->name('reports');
+    Route::get('/reports/export/documents', [ReportExportController::class, 'documents'])->name('reports.export.documents');
+    Route::get('/reports/export/divisions', [ReportExportController::class, 'divisions'])->name('reports.export.divisions');
+    Route::get('/reports/export/aging', [ReportExportController::class, 'aging'])->name('reports.export.aging');
     Route::livewire('/administration/documents', 'pages::admin.documents')->name('admin.documents');
     Route::livewire('/administration/document-types', 'pages::admin.document-types')->name('admin.document-types');
     Route::post('/logout', [FdcpAuthenticationController::class, 'logout'])->name('logout');

@@ -24,6 +24,7 @@
                     @endforeach
                     @if (auth()->user()->is_division_head || auth()->user()->is_admin)
                         <a wire:navigate href="{{ route('division') }}" @class(['flex rounded-lg px-3 py-2.5 font-medium', 'bg-fdcp-700' => request()->routeIs('division'), 'text-slate-300 hover:bg-white/10' => ! request()->routeIs('division')])>Division Overview</a>
+                        <a wire:navigate href="{{ route('reports') }}" @class(['flex rounded-lg px-3 py-2.5 font-medium', 'bg-fdcp-700' => request()->routeIs('reports'), 'text-slate-300 hover:bg-white/10' => ! request()->routeIs('reports')])>Reporting</a>
                     @endif
                     @if (auth()->user()->is_admin)
                         <p class="px-3 pt-5 text-xs font-semibold uppercase tracking-wider text-slate-500">Administration</p>
