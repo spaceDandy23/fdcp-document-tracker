@@ -113,6 +113,13 @@ class ReturnDocumentForRevision
                 'remarks' => $validated['reason'],
             ]);
 
+            app(NotifyDocumentWorkflow::class)->handle(
+                $recipient,
+                $lockedDocument,
+                'document_returned_for_revision',
+                "Document {$lockedDocument->tracking_number} was returned to you for revision.",
+            );
+
             return $route;
         });
     }

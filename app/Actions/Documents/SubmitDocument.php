@@ -125,6 +125,15 @@ class SubmitDocument
                 'action' => 'forwarded',
             ]);
 
+            app(NotifyDocumentWorkflow::class)->handle(
+                $recipient,
+                $lockedDocument,
+                $isRevision ? 'document_revision_resubmitted' : 'document_forwarded',
+                $isRevision
+                    ? "Revised document {$trackingNumber} was sent to you."
+                    : "Document {$trackingNumber} was sent to you.",
+            );
+
             return $route;
         });
     }

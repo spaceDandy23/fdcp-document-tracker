@@ -3,6 +3,7 @@
 namespace App\Actions\Documents;
 
 use App\Models\Document;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
@@ -24,6 +25,18 @@ class CompleteDocument
                 'performed_by' => auth()->id(),
                 'action' => 'completed',
             ]);
+
+            if ($lockedDocument->created_by !== auth()->id()) {
+                $creator = User::query()->find($lockedDocument->created_by);
+                if ($creator !== null) {
+                    app(NotifyDocumentWorkflow::class)->handle(
+                        $creator,
+                        $lockedDocument,
+                        'document_completed',
+                        "Document {$lockedDocument->tracking_number} was completed.",
+                    );
+                }
+            }
 
             return $lockedDocument;
         });

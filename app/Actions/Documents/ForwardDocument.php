@@ -86,6 +86,13 @@ class ForwardDocument
                 'remarks' => $validated['remarks'] ?? null,
             ]);
 
+            app(NotifyDocumentWorkflow::class)->handle(
+                $recipient,
+                $lockedDocument,
+                'document_forwarded',
+                "Document {$lockedDocument->tracking_number} was sent to you.",
+            );
+
             return $route;
         });
     }

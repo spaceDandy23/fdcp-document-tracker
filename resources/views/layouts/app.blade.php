@@ -40,7 +40,7 @@
                 <header class="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6">
                     <button type="button" class="rounded-lg p-2 text-slate-600 lg:hidden" @click="sidebarOpen = true" aria-label="Open navigation">☰</button>
                     <p class="hidden text-sm text-slate-500 sm:block">FDCP Internal Document Services</p>
-                    <form method="POST" action="{{ route('logout') }}">@csrf<button class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">Sign out</button></form>
+                    <div class="ml-auto flex items-center gap-3"><livewire:notification-bell /><form method="POST" action="{{ route('logout') }}">@csrf<button class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">Sign out</button></form></div>
                 </header>
                 <main class="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
                     <nav aria-label="Breadcrumb" class="mb-4 flex items-center gap-2 text-xs text-slate-500">

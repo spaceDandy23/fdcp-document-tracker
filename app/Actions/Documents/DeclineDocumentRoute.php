@@ -4,6 +4,7 @@ namespace App\Actions\Documents;
 
 use App\Models\Document;
 use App\Models\DocumentRoute;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
@@ -42,6 +43,16 @@ class DeclineDocumentRoute
                 'action' => 'declined',
                 'remarks' => $validated['reason'],
             ]);
+
+            $sender = User::query()->find($lockedRoute->from_user_id);
+            if ($sender !== null) {
+                app(NotifyDocumentWorkflow::class)->handle(
+                    $sender,
+                    $lockedDocument,
+                    'document_declined',
+                    "Your transfer of document {$lockedDocument->tracking_number} was declined.",
+                );
+            }
 
             return $lockedRoute;
         });
