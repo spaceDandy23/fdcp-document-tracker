@@ -43,6 +43,7 @@
 - Supported role slugs are case-sensitive: `admin`, `division_head`, and `staff`.
 - `admin` sets administrator oversight access, `division_head` sets division-head access, and `staff` grants neither elevated flag.
 - Missing, unknown, or malformed application roles are denied access. Role changes are synchronized at authentication and cannot be edited locally by users.
+- Locally synchronized inactive users are rejected on every web request and by document policies. An SSO-side deactivation cannot be detected immediately unless the application receives a synchronized status update or performs a fresh SSO status check.
 - Creators, current handlers, and previous handlers can view relevant documents.
 - Division heads can view documents originating from or routed through their divisions.
 - Administrators have authorized oversight access.

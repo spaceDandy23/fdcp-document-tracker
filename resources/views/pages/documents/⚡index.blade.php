@@ -13,18 +13,36 @@ new #[Title('My Documents')] class extends Component {
     #[Url] public string $sort = 'updated_at';
     #[Url] public string $direction = 'desc';
 
+    public function mount(): void { $this->normalizeSorting(); }
     public function updatedSearch(): void { $this->resetPage(); }
     public function updatedStatus(): void { $this->resetPage(); }
+    public function updatedSort(): void { $this->normalizeSorting(); $this->resetPage(); }
+    public function updatedDirection(): void { $this->normalizeSorting(); $this->resetPage(); }
     public function sortBy(string $column): void
     {
         abort_unless(in_array($column, ['title', 'status', 'updated_at'], true), 422);
         $this->direction = $this->sort === $column && $this->direction === 'asc' ? 'desc' : 'asc';
         $this->sort = $column;
+        $this->normalizeSorting();
+    }
+
+    private function normalizeSorting(): void
+    {
+        if (! is_string($this->sort) || ! in_array($this->sort, ['title', 'status', 'updated_at'], true)) {
+            $this->sort = 'updated_at';
+        }
+
+        $this->direction = is_string($this->direction) ? strtolower($this->direction) : 'desc';
+        if (! in_array($this->direction, ['asc', 'desc'], true)) {
+            $this->direction = 'desc';
+        }
     }
 
     #[Computed]
     public function documents()
     {
+        $this->normalizeSorting();
+
         return app(ListDocuments::class)->query()
             ->with(['documentType:id,name', 'currentHandler:id,name'])
             ->when($this->search !== '', fn ($query) => $query->where(fn ($query) => $query->where('title', 'like', '%'.$this->search.'%')->orWhere('tracking_number', 'like', '%'.$this->search.'%')))

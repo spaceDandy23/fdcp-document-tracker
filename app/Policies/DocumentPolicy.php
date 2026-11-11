@@ -8,6 +8,11 @@ use App\Models\User;
 
 class DocumentPolicy
 {
+    public function before(User $user): ?bool
+    {
+        return $user->is_active ? null : false;
+    }
+
     public function viewAny(User $user): bool
     {
         return $user->is_active;
@@ -111,5 +116,13 @@ class DocumentPolicy
     public function cancel(User $user, Document $document): bool
     {
         return $user->id === $document->created_by && $document->status === 'draft';
+    }
+
+    public function reassign(User $user, Document $document): bool
+    {
+        return $user->is_admin
+            && $document->current_handler_id !== null
+            && in_array($document->status, ['pending_acknowledgment', 'in_progress', 'revision_requested'], true)
+            && $document->currentHandler?->is_active === false;
     }
 }

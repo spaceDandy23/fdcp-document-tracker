@@ -109,6 +109,39 @@ class DocumentReportingTest extends TestCase
         $this->assertStringContainsString("'=SUM(1,1)", $response->streamedContent());
     }
 
+    public function test_csv_exports_escape_control_prefixed_formulas_and_preserve_normal_values(): void
+    {
+        $admin = $this->employee(['is_admin' => true]);
+        $type = $this->type();
+        $titles = [
+            '  =SUM(1,1)',
+            "\t+SUM(1,1)",
+            "\r-CMD()",
+            "\n@HYPERLINK(\"https://example.test\")",
+            '  Ordinary memo',
+        ];
+
+        foreach ($titles as $title) {
+            $this->document($admin, $type, [
+                'title' => $title,
+                'status' => 'completed',
+                'submitted_at' => now(),
+                'completed_at' => now(),
+                'current_handler_id' => null,
+            ]);
+        }
+
+        $csv = $this->actingAs($admin)->get(route('reports.export.documents'))
+            ->assertOk()
+            ->streamedContent();
+
+        $this->assertStringContainsString("'  =SUM(1,1)", $csv);
+        $this->assertStringContainsString("'\t+SUM(1,1)", $csv);
+        $this->assertMatchesRegularExpression("/'\\s*-CMD\\(\\)/s", $csv);
+        $this->assertMatchesRegularExpression("/'\\s*@HYPERLINK/s", $csv);
+        $this->assertStringContainsString('  Ordinary memo', $csv);
+    }
+
     public function test_aging_documents_are_paginated(): void
     {
         $admin = $this->employee(['is_admin' => true]);

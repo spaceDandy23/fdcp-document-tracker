@@ -6,6 +6,7 @@ use App\Actions\Documents\DeclineDocumentRoute;
 use App\Actions\Documents\ForwardDocument;
 use App\Actions\Documents\ReturnDocumentForRevision;
 use App\Actions\Documents\RemoveDocumentAttachment;
+use App\Actions\Documents\ReassignDocument;
 use App\Actions\Documents\SubmitDocument;
 use App\Actions\Documents\UpdateDocumentDraft;
 use App\Actions\Documents\UploadDocumentVersion;
@@ -45,6 +46,8 @@ new #[Title('Document Details')] class extends Component {
     public string $declineReason = '';
     public string $revisionReason = '';
     public string $revisionRecipientId = '';
+    public string $reassignmentReason = '';
+    public string $reassignmentRecipientId = '';
 
     public function mount(Document $document): void
     {
@@ -73,7 +76,7 @@ new #[Title('Document Details')] class extends Component {
     private function refreshDocument(): void
     {
         $this->document = $this->document->fresh();
-        unset($this->attachments, $this->removedAttachments, $this->pendingRoute, $this->versions, $this->timeline, $this->recipients, $this->forwardRecipients, $this->previousHandlers);
+        unset($this->attachments, $this->removedAttachments, $this->pendingRoute, $this->versions, $this->timeline, $this->recipients, $this->forwardRecipients, $this->previousHandlers, $this->reassignmentRecipients);
     }
 
     #[Computed]
@@ -112,6 +115,11 @@ new #[Title('Document Details')] class extends Component {
     {
         $ids = $this->document->routes()->pluck('from_user_id')->push($this->document->created_by)->unique()->reject(fn ($id) => $id === auth()->id());
         return User::query()->whereKey($ids)->where('is_active', true)->orderBy('name')->get(['id', 'name']);
+    }
+    #[Computed]
+    public function reassignmentRecipients()
+    {
+        return User::query()->where('is_active', true)->whereNotNull('division_id')->orderBy('name')->get(['id', 'name', 'division_id']);
     }
     #[Computed]
     public function pendingRoute() { return $this->document->routes()->where('to_user_id', auth()->id())->where('status', 'pending')->latest('id')->first(); }
@@ -220,6 +228,13 @@ new #[Title('Document Details')] class extends Component {
 
     public function complete(CompleteDocument $complete): void { $complete->handle($this->document); $this->refreshDocument(); session()->flash('success', 'Document completed.'); }
     public function cancel(CancelDocument $cancel): void { $cancel->handle($this->document); $this->refreshDocument(); session()->flash('success', 'Draft cancelled.'); }
+    public function reassign(ReassignDocument $reassign): void
+    {
+        $reassign->handle($this->document, ['recipient_id' => $this->reassignmentRecipientId, 'reason' => $this->reassignmentReason]);
+        $this->reset('reassignmentRecipientId', 'reassignmentReason');
+        $this->refreshDocument();
+        session()->flash('success', 'Document reassigned.');
+    }
 };
 ?>
 <div>
@@ -251,6 +266,8 @@ new #[Title('Document Details')] class extends Component {
             @can('forward', $document)<section class="rounded-2xl border border-slate-200 bg-white p-5"><h2 class="font-semibold">Forward document</h2><select wire:model="recipientId" class="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Select recipient</option>@foreach($this->forwardRecipients as $recipient)<option value="{{ $recipient->id }}" wire:key="forward-recipient-{{ $recipient->id }}">{{ $recipient->name }} ({{ $recipient->division->code }})</option>@endforeach</select><textarea wire:model="remarks" placeholder="Remarks (optional)" class="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></textarea><button wire:click="forward" wire:confirm="Forward this document?" class="mt-3 w-full rounded-lg bg-fdcp-700 px-4 py-2 text-sm font-semibold text-white">Forward</button></section>@endcan
 
             @can('returnForRevision', $document)<section class="rounded-2xl border border-slate-200 bg-white p-5"><h2 class="font-semibold">Return for revision</h2><textarea wire:model="revisionReason" required placeholder="Revision reason" class="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></textarea><select wire:model="revisionRecipientId" class="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Immediate sender (default)</option>@foreach($this->previousHandlers as $handler)<option value="{{ $handler->id }}" wire:key="previous-handler-{{ $handler->id }}">{{ $handler->name }}</option>@endforeach</select><button wire:click="returnForRevision" wire:confirm="Return this document for revision?" class="mt-3 w-full rounded-lg border border-orange-300 px-4 py-2 text-sm font-semibold text-orange-800">Return for revision</button></section>@endcan
+
+            @can('reassign', $document)<section class="rounded-2xl border border-indigo-200 bg-indigo-50 p-5"><h2 class="font-semibold">Reassign document</h2><p class="mt-1 text-sm text-slate-600">The current handler is inactive. Assign this document to an active employee.</p><select wire:model="reassignmentRecipientId" class="mt-4 w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm"><option value="">Select active recipient</option>@foreach($this->reassignmentRecipients as $recipient)<option value="{{ $recipient->id }}" wire:key="reassignment-recipient-{{ $recipient->id }}">{{ $recipient->name }}</option>@endforeach</select><x-form-error name="recipient_id" /><textarea wire:model="reassignmentReason" required placeholder="Reassignment reason" class="mt-3 w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm"></textarea><x-form-error name="reason" /><button wire:click="reassign" wire:confirm="Reassign this document?" class="mt-3 w-full rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white">Reassign document</button></section>@endcan
 
             <section class="rounded-2xl border border-slate-200 bg-white p-5"><h2 class="font-semibold">Final actions</h2><div class="mt-4 space-y-3">@can('complete', $document)<button wire:click="complete" wire:confirm="Complete this document? This cannot be undone." class="w-full rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white">Mark completed</button>@endcan @can('cancel', $document)<button wire:click="cancel" wire:confirm="Cancel this draft?" class="w-full rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-700">Cancel draft</button>@endcan</div></section>
 

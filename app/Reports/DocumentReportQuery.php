@@ -141,6 +141,6 @@ class DocumentReportQuery
     {
         /** @var User $user */
         $user = auth()->user();
-        abort_unless($user->is_admin || $user->is_division_head, 403);
+        abort_unless($user instanceof User && $user->is_active && ($user->is_admin || $user->is_division_head), 403);
     }
 }

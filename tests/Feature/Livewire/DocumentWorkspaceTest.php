@@ -195,6 +195,17 @@ class DocumentWorkspaceTest extends TestCase
             ->assertSee('External endorsement');
     }
 
+    public function test_document_list_normalizes_malformed_url_sorting_parameters(): void
+    {
+        $user = $this->employee();
+
+        Livewire::withQueryParams(['sort' => 'drop table documents', 'direction' => 'sideways'])
+            ->actingAs($user)
+            ->test('pages::documents.index')
+            ->assertSet('sort', 'updated_at')
+            ->assertSet('direction', 'desc');
+    }
+
     public function test_staff_cannot_open_division_or_administration_pages(): void
     {
         $this->actingAs($this->employee())->get('/division')->assertForbidden();

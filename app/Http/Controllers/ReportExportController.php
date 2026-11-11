@@ -79,7 +79,7 @@ class ReportExportController extends Controller
     private function safeRow(array $values): array
     {
         return array_map(static function (mixed $value): mixed {
-            if (is_string($value) && preg_match('/^[=+\-@]/', $value) === 1) {
+            if (is_string($value) && preg_match('/^\s*(?:[=+\-@]|[\t\r\n])/', $value) === 1) {
                 return "'{$value}";
             }
 
