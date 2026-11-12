@@ -13,6 +13,23 @@ class EnsureActiveUser
     {
         $user = $request->user();
 
+        if ($user !== null) {
+            $user = $user->fresh();
+
+            if ($user === null) {
+                Auth::logout();
+
+                if ($request->hasSession()) {
+                    $request->session()->invalidate();
+                    $request->session()->regenerateToken();
+                }
+
+                return response('Unauthenticated.', 401);
+            }
+
+            Auth::setUser($user);
+        }
+
         if ($user !== null && ! $user->is_active) {
             Auth::logout();
 
@@ -21,13 +38,20 @@ class EnsureActiveUser
                 $request->session()->regenerateToken();
             }
 
-            if ($request->expectsJson()) {
-                return response()->json(['message' => 'Unauthenticated.'], 401);
-            }
+            $response = $request->expectsJson()
+                ? response()->json(['message' => 'Unauthenticated.'], 401)
+                : redirect()->route('login');
+            $response->headers->set('Cache-Control', 'no-store, private');
 
-            return redirect()->route('login');
+            return $response;
         }
 
-        return $next($request);
+        $response = $next($request);
+
+        if ($user !== null) {
+            $response->headers->set('Cache-Control', 'no-store, private');
+        }
+
+        return $response;
     }
 }

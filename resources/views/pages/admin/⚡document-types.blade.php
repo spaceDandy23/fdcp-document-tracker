@@ -14,6 +14,7 @@ new #[Title('Document Types')] class extends Component {
     public string $code = '';
     public ?int $editingId = null;
     public function mount(): void { Gate::authorize('viewAny', DocumentType::class); }
+    public function hydrate(): void { Gate::authorize('viewAny', DocumentType::class); }
     #[Computed] public function types() { return DocumentType::query()->withCount('documents')->orderBy('name')->paginate(20, pageName: 'typesPage'); }
     public function edit(int $id): void { $type = DocumentType::findOrFail($id); Gate::authorize('update', $type); $this->editingId = $type->id; $this->name = $type->name; $this->code = $type->code; }
     public function save(SaveDocumentType $save): void { $type = $this->editingId ? DocumentType::findOrFail($this->editingId) : null; $save->handle(['name' => $this->name, 'code' => $this->code], $type); $this->reset('name', 'code', 'editingId'); unset($this->types); session()->flash('success', 'Document type saved.'); }

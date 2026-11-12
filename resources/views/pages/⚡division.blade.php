@@ -8,6 +8,7 @@ use Livewire\WithPagination;
 new #[Title('Division Overview')] class extends Component {
     use WithPagination;
     public function mount(): void { abort_unless(auth()->user()->is_division_head || auth()->user()->is_admin, 403); }
+    public function hydrate(): void { abort_unless(auth()->user()->is_division_head || auth()->user()->is_admin, 403); }
     #[Computed]
     public function documents()
     {

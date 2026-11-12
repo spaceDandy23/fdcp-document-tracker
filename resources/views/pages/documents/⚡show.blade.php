@@ -56,6 +56,18 @@ new #[Title('Document Details')] class extends Component {
         $this->fillDraftFields();
     }
 
+    public function hydrate(): void
+    {
+        $this->document = $this->document->fresh();
+        abort_if($this->document === null, 404);
+        Gate::authorize('view', $this->document);
+    }
+
+    private function authorizeDocumentView(): void
+    {
+        Gate::authorize('view', $this->document);
+    }
+
     private function fillDraftFields(): void
     {
         $this->title = $this->document->title;
@@ -80,7 +92,7 @@ new #[Title('Document Details')] class extends Component {
     }
 
     #[Computed]
-    public function documentTypes() { return DocumentType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']); }
+    public function documentTypes() { $this->authorizeDocumentView(); return DocumentType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']); }
     #[Computed]
     public function recipients()
     {
@@ -124,7 +136,7 @@ new #[Title('Document Details')] class extends Component {
     #[Computed]
     public function pendingRoute() { return $this->document->routes()->where('to_user_id', auth()->id())->where('status', 'pending')->latest('id')->first(); }
     #[Computed]
-    public function versions() { return $this->document->versions()->with('uploader:id,name')->latest('version_number')->paginate(10, pageName: 'versionsPage'); }
+    public function versions() { $this->authorizeDocumentView(); return $this->document->versions()->with('uploader:id,name')->latest('version_number')->paginate(10, pageName: 'versionsPage'); }
     #[Computed]
     public function attachments() { return $this->document->attachments()->with('uploader:id,name')->latest('id')->paginate(10, pageName: 'attachmentsPage'); }
     #[Computed]

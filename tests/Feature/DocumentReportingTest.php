@@ -68,7 +68,7 @@ class DocumentReportingTest extends TestCase
         $this->document($other, $this->type('Letter'), ['title' => 'Hidden document', 'submitted_at' => now(), 'status' => 'in_progress']);
         $this->actingAs($head);
 
-        Livewire::test('pages::reports')->assertSee('Visible document')->assertDontSee('Hidden document');
+        Livewire::test('pages::reports')->assertSee('Visible document')->assertDontSee('Hidden document')->assertDontSee('Division OTHER');
         $export = $this->get(route('reports.export.documents'))->assertOk();
         $this->assertStringContainsString('Visible document', $export->streamedContent());
         $this->assertStringNotContainsString('Hidden document', $export->streamedContent());

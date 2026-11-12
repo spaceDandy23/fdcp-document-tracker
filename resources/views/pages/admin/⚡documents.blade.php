@@ -10,9 +10,12 @@ new #[Title('Administration')] class extends Component {
     use WithPagination;
     #[Url] public string $search = '';
     public function mount(): void { abort_unless(auth()->user()->is_admin, 403); }
+    public function hydrate(): void { abort_unless(auth()->user()->is_admin, 403); }
     #[Computed]
     public function documents()
     {
+        abort_unless(auth()->user()->is_admin, 403);
+
         return Document::query()->with(['documentType:id,name', 'originDivision:id,code', 'creator:id,name', 'currentHandler:id,name'])
             ->when($this->search !== '', fn ($query) => $query->where(fn ($query) => $query->where('title', 'like', '%'.$this->search.'%')->orWhere('tracking_number', 'like', '%'.$this->search.'%')))
             ->latest()->paginate(20);

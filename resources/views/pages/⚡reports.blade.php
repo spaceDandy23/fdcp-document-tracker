@@ -17,13 +17,23 @@ new #[Title('Reporting')] class extends Component {
     public string $status = '';
 
     public function mount(): void { abort_unless(auth()->user()->is_admin || auth()->user()->is_division_head, 403); }
+    public function hydrate(): void { abort_unless(auth()->user()->is_admin || auth()->user()->is_division_head, 403); }
     public function updated(): void { $this->resetPage('agingPage'); unset($this->summary, $this->volume, $this->divisionMetrics, $this->agingDocuments); }
     private function filters(): array { return array_filter(['date_from' => $this->dateFrom, 'date_to' => $this->dateTo, 'division_id' => $this->divisionId, 'document_type' => $this->documentType, 'status' => $this->status], fn ($value) => $value !== ''); }
     #[Computed] public function summary(): array { return app(DocumentReportQuery::class)->summary($this->filters()); }
     #[Computed] public function volume() { return app(DocumentReportQuery::class)->volume($this->filters()); }
     #[Computed] public function divisionMetrics() { return app(DocumentReportQuery::class)->divisionMetrics($this->filters()); }
     #[Computed] public function agingDocuments() { return app(DocumentReportQuery::class)->paginateAgingDocuments($this->filters()); }
-    #[Computed] public function divisions() { return Division::query()->orderBy('name')->get(['id', 'name', 'code']); }
+    #[Computed] public function divisions()
+    {
+        $query = Division::query()->orderBy('name');
+
+        if (! auth()->user()->is_admin) {
+            $query->whereKey(auth()->user()->division_id);
+        }
+
+        return $query->get(['id', 'name', 'code']);
+    }
     #[Computed] public function documentTypes() { return DocumentType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']); }
     public function duration(?float $seconds): string { if ($seconds === null) { return 'No completed documents'; } return round($seconds / 86400, 1).' days'; }
     public function exportUrl(string $report): string { return route('reports.export.'.$report, $this->filters()); }

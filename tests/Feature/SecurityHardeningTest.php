@@ -8,6 +8,7 @@ use App\Models\DocumentType;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class SecurityHardeningTest extends TestCase
@@ -37,6 +38,19 @@ class SecurityHardeningTest extends TestCase
         $this->actingAs($user)->get(route('reports.export.documents'))->assertRedirect(route('login'));
     }
 
+    public function test_authenticated_responses_disable_caching_and_include_baseline_security_headers(): void
+    {
+        $user = $this->employee();
+
+        $response = $this->actingAs($user)->get(route('home'))
+            ->assertHeader('x-content-type-options', 'nosniff')
+            ->assertHeader('x-frame-options', 'SAMEORIGIN')
+            ->assertHeader('referrer-policy', 'strict-origin-when-cross-origin')
+            ->assertHeader('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('cache-control'));
+    }
+
     public function test_default_database_seeder_does_not_create_a_local_password_account(): void
     {
         config(['app.env' => 'production']);
@@ -45,6 +59,30 @@ class SecurityHardeningTest extends TestCase
 
         $this->assertDatabaseMissing('users', ['email' => 'test@example.com']);
         $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_existing_session_is_rejected_from_admin_routes_after_a_role_downgrade(): void
+    {
+        $admin = $this->employee(['is_admin' => true]);
+
+        $this->actingAs($admin)->get(route('admin.documents'))->assertOk();
+
+        DB::table('users')->where('id', $admin->id)->update(['is_admin' => false]);
+
+        $this->get(route('admin.documents'))->assertForbidden();
+    }
+
+    public function test_existing_session_is_rejected_from_a_document_after_a_role_downgrade(): void
+    {
+        $admin = $this->employee(['is_admin' => true]);
+        $owner = $this->employee();
+        $document = $this->draft($owner);
+
+        $this->actingAs($admin)->get(route('documents.show', $document))->assertOk();
+
+        DB::table('users')->where('id', $admin->id)->update(['is_admin' => false]);
+
+        $this->get(route('documents.show', $document))->assertForbidden();
     }
 
     private function employee(array $attributes = []): User
