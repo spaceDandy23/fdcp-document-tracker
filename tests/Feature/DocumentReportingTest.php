@@ -68,7 +68,7 @@ class DocumentReportingTest extends TestCase
         $this->document($other, $this->type('Letter'), ['title' => 'Hidden document', 'submitted_at' => now(), 'status' => 'in_progress']);
         $this->actingAs($head);
 
-        Livewire::test('pages::reports')->assertSee('Visible document')->assertDontSee('Hidden document');
+        Livewire::test('pages::reports')->assertSee('Visible document')->assertDontSee('Hidden document')->assertDontSee('Division OTHER');
         $export = $this->get(route('reports.export.documents'))->assertOk();
         $this->assertStringContainsString('Visible document', $export->streamedContent());
         $this->assertStringNotContainsString('Hidden document', $export->streamedContent());
@@ -95,7 +95,7 @@ class DocumentReportingTest extends TestCase
 
         $reports = app(DocumentReportQuery::class);
         $this->assertSame(1, $reports->documents(['document_type' => 'custom'])->count());
-        $this->assertSame('7–13 days', $reports->agingBucket($reports->agingDocuments()->sole()));
+        $this->assertSame('7â€“13 days', $reports->agingBucket($reports->agingDocuments()->sole()));
     }
 
     public function test_csv_exports_escape_spreadsheet_formulas_and_use_filter_scope(): void
@@ -192,3 +192,4 @@ class DocumentReportingTest extends TestCase
         DocumentRoute::query()->create(['document_id' => $document->id, 'document_version_id' => $version->id, 'from_user_id' => $from->id, 'to_user_id' => $to->id, 'from_division_id' => $from->division_id, 'to_division_id' => $to->division_id, 'route_type' => $type, 'status' => 'acknowledged', 'forwarded_at' => now(), 'acknowledged_at' => now()]);
     }
 }
+
